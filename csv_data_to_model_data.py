@@ -4,20 +4,36 @@ import os
 from itertools import combinations
 
 
-def load_calendar_data(dir_name):
+def load_calendar_data(source):
     """
     Carga los conjuntos y parámetros desde archivos CSV para el modelo de calendario
     de evaluaciones.
 
     Args:
-        directorio_datos (str): Ruta al directorio que contiene los archivos CSV
+        source: o bien un path (str/PathLike) a un directorio que contiene los
+            13 CSV del caso, o bien un dict {nombre_csv: archivo} donde
+            "archivo" es cualquier cosa que pandas.read_csv acepte (un path,
+            un objeto file-like como el que expone UploadFile.file de FastAPI,
+            o un BytesIO/StringIO). El dict permite cargar un caso a partir de
+            archivos subidos por HTTP sin tener que volcarlos a disco primero.
 
     Returns:
         dict: Diccionario con todos los conjuntos y parámetros del modelo
     """
+    source_is_dict = isinstance(source, dict)
 
     def load_csv(name):
-        file_path = os.path.join(dir_name, f"{name}.csv")
+        if source_is_dict:
+            if name not in source or source[name] is None:
+                raise FileNotFoundError(f"No se recibió el archivo {name}.csv")
+
+            file_obj = source[name]
+            if hasattr(file_obj, "seek"):
+                file_obj.seek(0)
+
+            return pd.read_csv(file_obj)
+
+        file_path = os.path.join(source, f"{name}.csv")
 
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"No se encontró el archivo {file_path}")
@@ -31,7 +47,22 @@ def load_calendar_data(dir_name):
         D = sorted(list(load_csv("dias")["id"]))
 
         # Unidades curriculares
-        C = list(load_csv("unidades_curriculares")["codigo"])
+        uc_df = load_csv("unidades_curriculares")
+        C = list(uc_df["codigo"])
+        # El nombre de la columna con el nombre completo de la UC varía según
+        # el caso: "descripcion" (p.ej. caso_sm) o "unidad_curricular" (los
+        # casos grandes, caso_1s1p/1s2p/2s1p/2s2p/md). Si no está ninguna,
+        # se usa el propio código como descripción.
+        if "descripcion" in uc_df.columns:
+            nombre_col = "descripcion"
+        elif "unidad_curricular" in uc_df.columns:
+            nombre_col = "unidad_curricular"
+        else:
+            nombre_col = "codigo"
+        uc_descriptions = {
+            str(row["codigo"]): f'{row[nombre_col]} ({row["codigo"]})'
+            for _, row in uc_df.iterrows()
+        }
 
         # Turnos
         T = sorted(list(load_csv("turnos")["id"]))
@@ -208,6 +239,7 @@ def load_calendar_data(dir_name):
             "PARES_UC": PARES_UC,
             "UC_MISMO_SEMESTRE": UC_MISMO_SEMESTRE,
             "DS": DS,
+            "uc_descriptions": uc_descriptions,
             # Parámetros
             "cp": cp,
             "fac_cp": fac_cp,
@@ -222,4 +254,5 @@ def load_calendar_data(dir_name):
         }
 
     except Exception as e:
-        raise Exception(f"Error al cargar los datos desde {dir_name}: {str(e)}")
+        origin = "archivos subidos" if source_is_dict else source
+        raise Exception(f"Error al cargar los datos desde {origin}: {str(e)}")

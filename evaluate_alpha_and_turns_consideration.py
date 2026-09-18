@@ -37,7 +37,9 @@ if __name__ == "__main__":
         print(f"Ejecutando para alpha: {alpha}, beta: {beta}")
         print(f"{'='*80}")
 
-        value, time, status, variables = solve_model(case, solver, alpha, beta, 60)
+        value, time, status, variables, uc_descriptions = solve_model(
+            case, solver, alpha, beta, 60
+        )
 
         print(f"Status {status}, valor {value}, tiempo {time:.2f} segundos")
 
@@ -53,7 +55,7 @@ if __name__ == "__main__":
             f"{OUTPUT_DIR}/schedule_caso:{case_name}_alpha:{alpha}_beta:{beta}.csv"
         )
 
-        generate_schedule_csv(variables, filename)
+        generate_schedule_csv(variables, uc_descriptions, filename)
 
         # Ejecutar métricas
         metrics = generate_metrics(
