@@ -1,3 +1,4 @@
+from csv_data_to_model_data import load_calendar_data
 from generate_schedule import generate_schedule_csv
 from metrics import generate_metrics
 import os
@@ -50,4 +51,5 @@ variables = [
     Variable(name, value) for name, value in [line.split(" ") for line in lines]
 ]
 
-generate_schedule_csv(variables, f"schedule_test.csv")
+uc_descriptions = load_calendar_data("casos/caso_1s1p")["uc_descriptions"]
+generate_schedule_csv(variables, uc_descriptions, f"schedule_test.csv")

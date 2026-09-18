@@ -1,7 +1,22 @@
 import csv
 
 
-def generate_schedule_csv(variables, csv_name="schedule.csv"):
+def generate_schedule_csv(variables, uc_descriptions=None, csv_name="schedule.csv"):
+    """
+    Args:
+        variables: variables del problema resuelto (o reconstruidas desde un .sol),
+            se usan solo las que empiezan con "x_" y valen 1.
+        uc_descriptions: dict {codigo_uc: descripcion} tal como lo devuelve
+            load_calendar_data (clave "uc_descriptions"). Si no se pasa, se usa
+            directamente el código de la UC. Antes esta función leía siempre
+            "data/unidades_curriculares.csv" del disco, lo cual sólo
+            funcionaba por casualidad para el caso que tuviera ese archivo
+            puntual, y rompía (o daba descripciones incorrectas) para
+            cualquier otro caso, incluidos los cargados desde archivos subidos.
+        csv_name: ruta del CSV de salida.
+    """
+    uc_descriptions = uc_descriptions or {}
+
     # Nos quedamos solo con las variables x que valen 1.
     schedule_vars = {}
     for v in variables:
@@ -22,13 +37,6 @@ def generate_schedule_csv(variables, csv_name="schedule.csv"):
     schedule = {
         i: {j: [] for j in range(1, max_turn + 1)} for i in range(1, max_day + 1)
     }
-
-    # Cargamos las descripciones de las unidades curriculares.
-    uc_descriptions = {}
-    with open("data/unidades_curriculares.csv", "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            uc_descriptions[row["codigo"]] = row["descripcion"] + " (" + row["codigo"] + ")"
 
     # Procesamos cada una de las variables para agregarlas al schedule.
     for var_name in schedule_vars:

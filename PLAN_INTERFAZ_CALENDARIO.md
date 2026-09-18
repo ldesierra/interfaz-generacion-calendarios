@@ -19,7 +19,7 @@ Fuente: `Estimacion_Interfaz_Calendario (1).xlsx` (Downloads). Este documento es
 Carga de CSVs grandes + selects/inputs para parámetros menores + ejecución del modelo y entrega del calendario.
 
 - [x] 1. Diseño de arquitectura (endpoints, contrato front/back, estructura de carpetas) — 6–8h → ver `docs/ARQUITECTURA_INTERFAZ.md`
-- [ ] 2. Refactor de `solve.py` / `csv_data_to_model_data.py` para recibir archivos subidos en vez de leer de un directorio fijo — 8–12h
+- [x] 2. Refactor de `solve.py` / `csv_data_to_model_data.py` para recibir archivos subidos en vez de leer de un directorio fijo — 8–12h
 - [ ] 3. Endpoint(s) de carga de los CSVs grandes + validación de esquema (columnas esperadas, tipos, mensajes de error claros) — 6–10h
 - [ ] 4. Formulario de parámetros menores (alpha, beta, tiempo límite, nombre del caso) con selects/inputs — 4–5h
 - [ ] 5. Ejecución asíncrona del solve: job en background (no bloquear el request HTTP) + endpoint de status/polling — 10–14h
@@ -59,4 +59,12 @@ _(Actualizar acá a medida que se avanza: qué tarea/subtarea está en curso, de
   - Bug detectado a corregir en la subtarea 2: `generate_schedule.py:28` lee `data/unidades_curriculares.csv` hardcodeado en vez del directorio del caso.
   - Caso `casos/caso_sm/datos.csv` no tiene la columna `alta_co` que el código actual espera — el validador de `POST /api/cases` tiene que atajar esto.
   - Quedan abiertas (no bloquean el diseño, se resuelven en su subtarea): mecanismo real de ejecución en background en Vercel free tier (subtarea 5) y storage de archivos subidos/resultado (subtarea 9).
-- Próximo paso: subtarea 2 (refactor de `solve.py` / `csv_data_to_model_data.py` para recibir archivos subidos).
+- 2026-09-18: Tarea 1 / subtarea 2 (refactor para recibir archivos subidos) hecha.
+  - `csv_data_to_model_data.load_calendar_data` ahora acepta un `dir_name` (disco, comportamiento anterior) **o** un `dict {nombre_csv: archivo}` (cualquier cosa que `pandas.read_csv` lea: `UploadFile.file`, `BytesIO`, etc.) — sin escribir a disco primero. También devuelve `uc_descriptions`.
+  - `solve.solve_model` devuelve ahora `(valor, tiempo, status, variables, uc_descriptions)` — un elemento más que antes.
+  - `generate_schedule.generate_schedule_csv(variables, uc_descriptions, csv_name)` — se sacó el hardcodeo de `data/unidades_curriculares.csv` (el bug detectado en la subtarea 1); ahora recibe las descripciones ya cargadas por `load_calendar_data`.
+  - Se actualizaron los 3 call sites existentes (`main.py`, `evaluate_alpha_and_turns_consideration.py`, `solution_to_calendar.py`) para el nuevo contrato.
+  - **Hallazgo importante corrigiendo la subtarea 1:** `unidades_curriculares.csv` no tiene siempre columna `descripcion` — los casos grandes (`1s1p`, `1s2p`, `2s1p`, `2s2p`, `md`) usan `unidad_curricular` en su lugar. `load_calendar_data` soporta ambas. Se corrigió `docs/ARQUITECTURA_INTERFAZ.md` §4 en consecuencia.
+  - Verificado (sin poetry disponible en este entorno — se armó un venv aparte sólo para probar): `load_calendar_data` da resultados idénticos leyendo de disco vs. de un dict de `BytesIO` simulando uploads sobre `casos/caso_1s1p`; corrida real end-to-end con CBC (disco y "upload") generando el CSV del calendario con descripciones correctas en ambos casos.
+  - Sin cambios de comportamiento para los llamados existentes desde disco (mismo `dir_name` como antes).
+- Próximo paso: subtarea 3 (endpoint(s) de carga de los CSVs grandes + validación de esquema).
