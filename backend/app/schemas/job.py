@@ -48,3 +48,19 @@ class JobStatusResponse(BaseModel):
     started_at: Optional[datetime] = None
     elapsed_seconds: Optional[float] = None
     error_message: Optional[str] = None
+
+
+class ScheduleGrid(BaseModel):
+    dias: list[int]
+    turnos: list[int]
+    # {"<dia>": {"<turno>": ["UC 1 (código)", ...]}} — claves como string
+    # porque así viajan por JSON.
+    grilla: dict[str, dict[str, list[str]]]
+
+
+class JobResultResponse(BaseModel):
+    status: JobStatusName
+    objective_value: Optional[float] = None
+    execution_time_seconds: Optional[float] = None
+    schedule: Optional[ScheduleGrid] = None
+    error_message: Optional[str] = None

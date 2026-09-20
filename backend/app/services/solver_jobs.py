@@ -31,6 +31,7 @@ _SOLVE_STATUS_TO_JOB_STATUS: dict[str, JobStatusName] = {
 class Job:
     job_id: str
     case_id: str
+    nombre_corrida: str
     status: JobStatusName = "pending"
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
@@ -53,8 +54,10 @@ def get_job(job_id: str) -> Optional[Job]:
         return _JOBS.get(job_id)
 
 
-def start_solve_job(case_id: str, alpha: float, beta: float, time_limit_minutes: int) -> Job:
-    job = Job(job_id=uuid.uuid4().hex, case_id=case_id)
+def start_solve_job(
+    case_id: str, nombre_corrida: str, alpha: float, beta: float, time_limit_minutes: int
+) -> Job:
+    job = Job(job_id=uuid.uuid4().hex, case_id=case_id, nombre_corrida=nombre_corrida)
     with _JOBS_LOCK:
         _JOBS[job.job_id] = job
 
