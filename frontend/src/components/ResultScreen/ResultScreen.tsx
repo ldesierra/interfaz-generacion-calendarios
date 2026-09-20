@@ -77,8 +77,28 @@ export function ResultScreen({ jobId, onRestart }: ResultScreenProps) {
     );
   }
 
+  if (result.status === "timeout" && !result.schedule) {
+    return (
+      <div className="result-screen">
+        <p className="result-screen__timeout">
+          {result.message ??
+            "Se alcanzó el tiempo límite sin encontrar ningún calendario factible."}
+        </p>
+        <button type="button" onClick={onRestart}>
+          Empezar de nuevo
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="result-screen">
+      {result.status === "timeout" && (
+        <p role="alert" className="result-screen__timeout-warning">
+          {result.message ?? "Se alcanzó el tiempo límite antes de probar que la solución es óptima."}
+        </p>
+      )}
+
       <dl className="result-screen__summary">
         <div>
           <dt>Valor de la función objetivo</dt>

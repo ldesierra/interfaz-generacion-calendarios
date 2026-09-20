@@ -4,11 +4,11 @@ from generate_schedule import generate_schedule_csv
 from datetime import datetime
 
 if __name__ == "__main__":
-    value, time, status, variables, uc_descriptions = solve_model(
+    value, time, status, variables, uc_descriptions, solution_status = solve_model(
         Case.large_1s1p, Solver.GUROBI_CMD, 0.5, 0.5, 180
     )
 
-    print("Status:", status)
+    print("Status:", status, "-", solution_status)
 
     if status != "Optimal":
         raise Exception(f"El problema no tiene solución óptima. Status: {status}")

@@ -242,3 +242,100 @@ def test_download_of_unknown_job_returns_404():
     response = client.get("/api/jobs/no-existe/download")
 
     assert response.status_code == 404
+
+
+# --- Timeout de CBC (subtarea 8) --------------------------------------------
+#
+# Forzar un timeout real de CBC de forma determinística no es viable en un
+# test (dependería de timings de la máquina). En cambio, se monkeypatchea
+# `solve_model` para devolver exactamente las combinaciones (status,
+# solution_status) que CBC produce al agotar el tiempo límite — con y sin
+# una solución entera encontrada — y se verifica que el ciclo completo
+# (status → result → download) las traduce como espera `_classify_solution`
+# (cubierto también, de forma aislada, por test_solver_jobs.py).
+
+
+def _fake_solve_model_factory(status, solution_status, value=None, variables=None, uc_descriptions=None):
+    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes):
+        return (value, 0.01, status, variables or [], uc_descriptions or {}, solution_status)
+
+    return _fake_solve_model
+
+
+def test_timeout_with_feasible_solution_still_returns_a_downloadable_schedule(
+    small_case, monkeypatch
+):
+    from constants import Solver
+    from solve import solve_model as real_solve_model
+    from backend.app.core import config as core_config
+    from backend.app.services import solver_jobs
+
+    # Se resuelve una vez de verdad para tener variables/uc_descriptions
+    # realistas, y se les asigna el status que CBC reportaría al agotar el
+    # tiempo con una solución entera ya encontrada.
+    case_dir = core_config.STORAGE_DIR / small_case
+    value, _, _, variables, uc_descriptions, _ = real_solve_model(
+        case_dir, Solver.PULP_CBC_CMD, 0.5, 0.5, 1
+    )
+
+    monkeypatch.setattr(
+        solver_jobs,
+        "solve_model",
+        _fake_solve_model_factory(
+            "Optimal", "Solution Found", value=value, variables=variables, uc_descriptions=uc_descriptions
+        ),
+    )
+
+    response = client.post(f"/api/cases/{small_case}/solve", json=_solve_payload())
+    job_id = response.json()["job_id"]
+
+    status_body = _wait_for_status(job_id, {"timeout", "optimal", "infeasible", "error"})
+    assert status_body["status"] == "timeout"
+
+    result = client.get(f"/api/jobs/{job_id}/result").json()
+    assert result["status"] == "timeout"
+    assert result["proven_optimal"] is False
+    assert result["schedule"] is not None
+    assert "tiempo límite" in result["message"]
+
+    download = client.get(f"/api/jobs/{job_id}/download")
+    assert download.status_code == 200
+
+
+def test_timeout_without_any_feasible_solution_has_no_schedule_and_no_download(
+    small_case, monkeypatch
+):
+    from backend.app.services import solver_jobs
+
+    monkeypatch.setattr(
+        solver_jobs,
+        "solve_model",
+        _fake_solve_model_factory("Not Solved", "No Solution Found"),
+    )
+
+    response = client.post(f"/api/cases/{small_case}/solve", json=_solve_payload())
+    job_id = response.json()["job_id"]
+
+    status_body = _wait_for_status(job_id, {"timeout", "optimal", "infeasible", "error"})
+    assert status_body["status"] == "timeout"
+
+    result = client.get(f"/api/jobs/{job_id}/result").json()
+    assert result["status"] == "timeout"
+    assert result["schedule"] is None
+    assert result["proven_optimal"] is None
+    assert "sin encontrar" in result["message"]
+
+    download = client.get(f"/api/jobs/{job_id}/download")
+    assert download.status_code == 409
+
+
+def _wait_for_status(job_id: str, terminal_statuses: set[str]) -> dict:
+    deadline = time.monotonic() + 20
+    status_body = None
+    while time.monotonic() < deadline:
+        status_body = client.get(f"/api/jobs/{job_id}").json()
+        if status_body["status"] in terminal_statuses:
+            return status_body
+        time.sleep(0.1)
+
+    raise AssertionError(f"el job {job_id} no llegó a un estado terminal a tiempo: {status_body}")

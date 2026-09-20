@@ -10,7 +10,7 @@ from constants import Solver, MINUTES
 
 def solve_model(
     source, solver_name: Solver, alpha: float, beta: float, time_limit_minutes=15
-) -> tuple[float, float, str, list, dict]:
+) -> tuple[float, float, str, list, dict, str]:
     """
     Args:
         source: path a un directorio con los CSV del caso, o un dict
@@ -18,7 +18,16 @@ def solve_model(
             csv_data_to_model_data.load_calendar_data).
 
     Returns:
-        (valor_objetivo, tiempo_ejecucion_seg, status, variables, uc_descriptions)
+        (valor_objetivo, tiempo_ejecucion_seg, status, variables, uc_descriptions, solution_status)
+
+        `status` (`pl.LpStatus`) y `solution_status` (`pl.LpSolution`) hay
+        que mirarlos juntos: CBC, al llegar al `time_limit_minutes` con una
+        solución entera factible pero sin probar que sea óptima, reporta
+        `status="Optimal"` igual (una particularidad de cómo PuLP parsea la
+        salida de CBC) — `solution_status` es lo único que distingue ese
+        caso ("Solution Found") de un óptimo probado ("Optimal Solution
+        Found"). Si el tiempo se agota sin encontrar ninguna solución
+        entera, `status` pasa a ser "Not Solved".
     """
     # region CARGA DE DATOS
     datos = load_calendar_data(source)
@@ -227,5 +236,6 @@ def solve_model(
         pl.LpStatus[problem.status],
         problem.variables(),
         datos.get("uc_descriptions"),
+        pl.LpSolution[problem.sol_status],
     )
     # endregion

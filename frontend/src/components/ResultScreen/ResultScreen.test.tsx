@@ -20,6 +20,8 @@ function optimalResult(): JobResultResponse {
       turnos: [1],
       grilla: { "1": { "1": ["UC B (B)"] }, "2": { "1": ["UC A (A)"] } },
     },
+    proven_optimal: true,
+    message: null,
     error_message: null,
   };
 }
@@ -45,6 +47,8 @@ describe("ResultScreen", () => {
       objective_value: null,
       execution_time_seconds: 1.2,
       schedule: null,
+      proven_optimal: null,
+      message: null,
       error_message: null,
     });
 
@@ -60,12 +64,56 @@ describe("ResultScreen", () => {
       objective_value: null,
       execution_time_seconds: 0.5,
       schedule: null,
+      proven_optimal: null,
+      message: null,
       error_message: "No se encontró el archivo capacidad.csv",
     });
 
     render(<ResultScreen jobId="job-1" onRestart={vi.fn()} />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/capacidad\.csv/);
+  });
+
+  it("shows a message and no download link when timeout has no feasible solution", async () => {
+    vi.mocked(getJobResult).mockResolvedValue({
+      status: "timeout",
+      objective_value: null,
+      execution_time_seconds: 900,
+      schedule: null,
+      proven_optimal: null,
+      message: "Se alcanzó el tiempo límite sin encontrar ningún calendario factible.",
+      error_message: null,
+    });
+
+    render(<ResultScreen jobId="job-1" onRestart={vi.fn()} />);
+
+    expect(await screen.findByText(/sin encontrar ningún calendario factible/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /descargar csv/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the schedule with a not-proven-optimal warning and a download link on timeout with a solution", async () => {
+    vi.mocked(getJobResult).mockResolvedValue({
+      status: "timeout",
+      objective_value: 0.8,
+      execution_time_seconds: 900,
+      schedule: {
+        dias: [1, 2],
+        turnos: [1],
+        grilla: { "1": { "1": ["UC B (B)"] }, "2": { "1": ["UC A (A)"] } },
+      },
+      proven_optimal: false,
+      message: "Se alcanzó el tiempo límite antes de poder probar que la solución es óptima.",
+      error_message: null,
+    });
+
+    render(<ResultScreen jobId="job-1" onRestart={vi.fn()} />);
+
+    expect(await screen.findByText(/antes de poder probar que la solución es óptima/i)).toBeInTheDocument();
+    expect(screen.getByText("UC B (B)")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /descargar csv/i })).toHaveAttribute(
+      "href",
+      "/api/jobs/job-1/download"
+    );
   });
 
   it("shows an error and lets the user restart when fetching the result fails", async () => {
