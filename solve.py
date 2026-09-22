@@ -3,9 +3,62 @@ from timeit import default_timer as timer
 import os
 import pulp as pl
 import pandas as pd
+from dotenv import load_dotenv
 
 from csv_data_to_model_data import load_calendar_data
 from constants import Solver, MINUTES
+
+load_dotenv()
+
+
+def _cop_conflict_groups(cop_pairs):
+    """
+    Agrupa los pares de UC con profesores coincidentes (COP) en componentes
+    conexas. Cuando una componente es un clique completo (todas las UC del
+    grupo son incompatibles entre sí), se puede reemplazar por una única
+    restricción "a lo sumo una del grupo por turno", que es más fuerte (mejor
+    relajación LP) que imponer la restricción par por par. Componentes que no
+    son cliques completos se dejan como pares sueltos para no cambiar el
+    conjunto de soluciones factibles.
+    """
+    from collections import defaultdict
+
+    adj = defaultdict(set)
+    nodes = set()
+    for a, b in cop_pairs:
+        adj[a].add(b)
+        adj[b].add(a)
+        nodes.add(a)
+        nodes.add(b)
+
+    visited = set()
+    clique_groups = []
+    leftover_pairs = []
+
+    for start in nodes:
+        if start in visited:
+            continue
+
+        stack = [start]
+        component = set()
+        while stack:
+            n = stack.pop()
+            if n in component:
+                continue
+            component.add(n)
+            stack.extend(adj[n] - component)
+        visited |= component
+
+        is_clique = all((adj[n] | {n}) >= component for n in component)
+
+        if is_clique and len(component) > 1:
+            clique_groups.append(sorted(component))
+        else:
+            for a, b in cop_pairs:
+                if a in component and b in component:
+                    leftover_pairs.append((a, b))
+
+    return clique_groups, leftover_pairs
 
 
 def solve_model(
@@ -39,7 +92,7 @@ def solve_model(
     COP = datos.get("COP")
     P = datos.get("P")
     PARES_UC = datos.get("PARES_UC")
-    UC_MISMO_SEMESTRE = datos.get("UC_MISMO_SEMESTRE")
+    GRUPOS_MISMO_SEMESTRE = datos.get("GRUPOS_MISMO_SEMESTRE")
     cp = datos.get("cp")
     fac_cp = datos.get("fac_cp")
     alta_co = datos.get("alta_co")
@@ -114,9 +167,16 @@ def solve_model(
     # region DEFINICIÓN DE LAS RESTRICCIONES
 
     # Los cursos que tengan profesores coincidentes no pueden ser asignados el mismo turno
+    cop_clique_groups, cop_leftover_pairs = _cop_conflict_groups(COP)
+
     for d in D:
         for t in Td[d]:
-            for c1, c2 in COP:
+            for idx, group in enumerate(cop_clique_groups):
+                problem += (
+                    pl.lpSum(x[c, d, t] for c in group) <= 1,
+                    f"No_Solapamiento_COP_Grupo_{idx}_Dia_{d}_Turno_{t}",
+                )
+            for c1, c2 in cop_leftover_pairs:
                 problem += (
                     x[c1, d, t] + x[c2, d, t] <= 1,
                     f"No_Solapamiento_COP_{c1}_{c2}_Dia_{d}_Turno_{t}",
@@ -137,12 +197,13 @@ def solve_model(
                 f"MaximaEvaluacionesTurno_{d}_{t}",
             )
 
-    # Si dos UC están sugeridas en el mismo semestre para la misma carrera, se asignan a días distintos
+    # Si dos o más UC están sugeridas en el mismo semestre para la misma carrera,
+    # se asignan a días distintos (a lo sumo una del grupo por día)
     for d in D:
-        for c1, c2 in UC_MISMO_SEMESTRE:
+        for idx, group in enumerate(GRUPOS_MISMO_SEMESTRE):
             problem += (
-                pl.lpSum(x[c1, d, t] + x[c2, d, t] for t in Td[d]) <= 1,
-                f"Dias_Distintos_{c1}_{c2}_Dia_{d}",
+                pl.lpSum(x[c, d, t] for c in group for t in Td[d]) <= 1,
+                f"Dias_Distintos_Grupo_{idx}_Dia_{d}",
             )
 
     # No se puede superar la capacidad disponible de los salones, teniendo en cuenta el factor de capacidad, para cada día y turno
@@ -202,20 +263,31 @@ def solve_model(
 
     match solver_name:
         case Solver.GUROBI_CMD:
-            solver = pl.GUROBI_CMD(
+            # Usa gurobipy (bindings nativos) en vez del binario gurobi_cl,
+            # para poder conectarse a una licencia WLS via variables de entorno
+            # (GRB_WLSACCESSID / GRB_WLSSECRET / GRB_LICENSEID) sin depender
+            # de tener el instalador completo de Gurobi.
+            gurobi_env_options = {
+                key: cast(os.environ[env_var])
+                for key, env_var, cast in [
+                    ("WLSACCESSID", "GRB_WLSACCESSID", str),
+                    ("WLSSECRET", "GRB_WLSSECRET", str),
+                    ("LICENSEID", "GRB_LICENSEID", int),
+                ]
+                if env_var in os.environ
+            }
+            solver = pl.GUROBI(
                 msg=1,
-                threads=cpu_cores,
                 timeLimit=time_limit,
-                options=[
-                    ("MIPFocus", 2),  # Enfocarse en buscar soluciones factibles rápido
-                    ("Presolve", 2),  # Presolución agresiva
-                    ("Cuts", 3),  # Generar cortes super agresivos
-                    ("Heuristics", 0.5),  # Aumentar el esfuerzo heurístico
-                    ("VarBranch", 3),  # Ramificación fuerte
-                    ("NoRelHeurWork", 10),
-                    # ("SolFiles", "solutions/test/solution"),
-                    # ("InputFile", "solutions/solution_99.sol"),
-                ],
+                manageEnv=True,
+                envOptions=gurobi_env_options,
+                Threads=cpu_cores,
+                MIPFocus=1,  # Enfocarse en encontrar soluciones factibles rápido
+                Presolve=2,  # Presolución agresiva
+                Cuts=3,  # Generar cortes super agresivos
+                Heuristics=0.5,  # Aumentar el esfuerzo heurístico
+                VarBranch=3,  # Ramificación fuerte
+                NoRelHeurWork=10,
             )
         case Solver.CPLEX_CMD:
             solver = pl.CPLEX_CMD(msg=1, threads=cpu_cores, timeLimit=time_limit)
