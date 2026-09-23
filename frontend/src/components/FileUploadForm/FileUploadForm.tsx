@@ -34,19 +34,32 @@ interface FileUploadFormProps {
 // repetirse igual entre casos, así que se precargan desde los ejemplos para
 // no obligar a subirlos a mano cada vez. El usuario puede reemplazarlos
 // igual eligiendo otro archivo en el input correspondiente.
-const DEFAULT_LOADED_FILES: RequiredFileName[] = [
+const REFERENCE_FILES: RequiredFileName[] = [
   "unidades_curriculares",
   "turnos",
   "semestres",
   "carreras",
 ];
 
-const REMAINING_FILES = REQUIRED_FILES.filter((name) => !DEFAULT_LOADED_FILES.includes(name));
+const OVERLAP_FILES: RequiredFileName[] = ["trayectoria_sugerida", "previas", "inscriptos", "coincidencia"];
 
-type Substep = "reference" | "case";
+const CASE_FILES = REQUIRED_FILES.filter(
+  (name) => !REFERENCE_FILES.includes(name) && !OVERLAP_FILES.includes(name),
+);
+
+interface SubstepDef {
+  description: string;
+  files: RequiredFileName[];
+}
+
+const SUBSTEPS: SubstepDef[] = [
+  { description: "datos de referencia (precargados, podés reemplazarlos)", files: REFERENCE_FILES },
+  { description: "trayectoria sugerida, previas, inscriptos y coincidencia", files: OVERLAP_FILES },
+  { description: "datos restantes específicos de este caso", files: CASE_FILES },
+];
 
 export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
-  const [substep, setSubstep] = useState<Substep>("reference");
+  const [substepIndex, setSubstepIndex] = useState(0);
   const [files, setFiles] = useState<FileMap>({});
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<RequiredFileName, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -56,7 +69,7 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
     let cancelled = false;
 
     Promise.all(
-      DEFAULT_LOADED_FILES.map(async (name) => {
+      REFERENCE_FILES.map(async (name) => {
         const response = await fetch(`/ejemplos_csv/${name}.csv`);
         if (!response.ok) throw new Error(`No se pudo cargar ${name}.csv`);
         const blob = await response.blob();
@@ -76,7 +89,8 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
     };
   }, []);
 
-  const visibleFiles = substep === "reference" ? DEFAULT_LOADED_FILES : REMAINING_FILES;
+  const isLastSubstep = substepIndex === SUBSTEPS.length - 1;
+  const visibleFiles = SUBSTEPS[substepIndex].files;
   const missingVisible = visibleFiles.filter((name) => !files[name]);
   const allVisiblePresent = missingVisible.length === 0;
   const allFilesPresent = REQUIRED_FILES.every((name) => files[name]);
@@ -92,8 +106,8 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
     event.preventDefault();
     if (!allVisiblePresent || submitting) return;
 
-    if (substep === "reference") {
-      setSubstep("case");
+    if (!isLastSubstep) {
+      setSubstepIndex((index) => index + 1);
       return;
     }
 
@@ -114,10 +128,13 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
           errors[key] = errors[key] ? `${errors[key]}; ${detail.issue}` : detail.issue;
         }
         setFieldErrors(errors);
-        // Si el error es de uno de los CSV de referencia (no visibles en este
-        // substep), volvemos para que se vea.
-        if (DEFAULT_LOADED_FILES.some((name) => errors[name])) {
-          setSubstep("reference");
+        // Si el error es de un CSV que no se ve en el último substep,
+        // volvemos al substep que lo contiene para que se vea.
+        const earliestErroredSubstep = SUBSTEPS.findIndex((s) =>
+          s.files.some((name) => errors[name]),
+        );
+        if (earliestErroredSubstep !== -1 && earliestErroredSubstep !== SUBSTEPS.length - 1) {
+          setSubstepIndex(earliestErroredSubstep);
         }
       } else {
         setSubmitError(err instanceof Error ? err.message : "Error desconocido al subir el caso.");
@@ -130,9 +147,7 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
       <p className="text-sm text-muted-foreground">
-        {substep === "reference"
-          ? "Paso 1 de 2: datos de referencia (precargados, podés reemplazarlos)"
-          : "Paso 2 de 2: datos específicos de este caso"}
+        Paso {substepIndex + 1} de {SUBSTEPS.length}: {SUBSTEPS[substepIndex].description}
       </p>
 
       <ul className="flex flex-col gap-1.5">
@@ -190,12 +205,12 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
       )}
 
       <div className="flex justify-end gap-2 mb-6">
-        {substep === "case" && (
+        {substepIndex > 0 && (
           <Button
             type="button"
             variant="outline"
             disabled={submitting}
-            onClick={() => setSubstep("reference")}
+            onClick={() => setSubstepIndex((index) => index - 1)}
           >
             Atrás
           </Button>
