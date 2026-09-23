@@ -41,7 +41,12 @@ const DEFAULT_LOADED_FILES: RequiredFileName[] = [
   "carreras",
 ];
 
+const REMAINING_FILES = REQUIRED_FILES.filter((name) => !DEFAULT_LOADED_FILES.includes(name));
+
+type Substep = "reference" | "case";
+
 export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
+  const [substep, setSubstep] = useState<Substep>("reference");
   const [files, setFiles] = useState<FileMap>({});
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<RequiredFileName, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -71,8 +76,10 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
     };
   }, []);
 
-  const missing = REQUIRED_FILES.filter((name) => !files[name]);
-  const allFilesPresent = missing.length === 0;
+  const visibleFiles = substep === "reference" ? DEFAULT_LOADED_FILES : REMAINING_FILES;
+  const missingVisible = visibleFiles.filter((name) => !files[name]);
+  const allVisiblePresent = missingVisible.length === 0;
+  const allFilesPresent = REQUIRED_FILES.every((name) => files[name]);
 
   function handleSingleChange(name: RequiredFileName, event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -83,7 +90,14 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!allFilesPresent || submitting) return;
+    if (!allVisiblePresent || submitting) return;
+
+    if (substep === "reference") {
+      setSubstep("case");
+      return;
+    }
+
+    if (!allFilesPresent) return;
 
     setSubmitting(true);
     setSubmitError(null);
@@ -100,6 +114,11 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
           errors[key] = errors[key] ? `${errors[key]}; ${detail.issue}` : detail.issue;
         }
         setFieldErrors(errors);
+        // Si el error es de uno de los CSV de referencia (no visibles en este
+        // substep), volvemos para que se vea.
+        if (DEFAULT_LOADED_FILES.some((name) => errors[name])) {
+          setSubstep("reference");
+        }
       } else {
         setSubmitError(err instanceof Error ? err.message : "Error desconocido al subir el caso.");
       }
@@ -110,8 +129,14 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
 
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+      <p className="text-sm text-muted-foreground">
+        {substep === "reference"
+          ? "Paso 1 de 2: datos de referencia (precargados, podés reemplazarlos)"
+          : "Paso 2 de 2: datos específicos de este caso"}
+      </p>
+
       <ul className="flex flex-col gap-1.5">
-        {REQUIRED_FILES.map((name) => {
+        {visibleFiles.map((name) => {
           const file = files[name];
           const error = fieldErrors[name];
           const inputId = `file-${name}`;
@@ -164,9 +189,21 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
         </Alert>
       )}
 
-      <Button type="submit" disabled={!allFilesPresent || submitting} className="self-end mb-6">
-        {submitting ? "Subiendo..." : "Continuar"}
-      </Button>
+      <div className="flex justify-end gap-2 mb-6">
+        {substep === "case" && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={submitting}
+            onClick={() => setSubstep("reference")}
+          >
+            Atrás
+          </Button>
+        )}
+        <Button type="submit" disabled={!allVisiblePresent || submitting}>
+          {submitting ? "Subiendo..." : "Continuar"}
+        </Button>
+      </div>
     </form>
   );
 }

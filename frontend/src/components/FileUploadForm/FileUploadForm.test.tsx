@@ -4,19 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REQUIRED_FILES } from "../../api/types";
 import { FileUploadForm } from "./FileUploadForm";
 
+const REFERENCE_FILES = ["unidades_curriculares", "turnos", "semestres", "carreras"] as const;
+const REMAINING_FILES = REQUIRED_FILES.filter(
+  (name) => !(REFERENCE_FILES as readonly string[]).includes(name),
+);
+
 function csvFile(name: string) {
   return new File(["id\n1\n"], `${name}.csv`, { type: "text/csv" });
 }
 
-async function uploadAllRequiredFiles(user: ReturnType<typeof userEvent.setup>, container: HTMLElement) {
-  for (const name of REQUIRED_FILES) {
-    const input = container.querySelector<HTMLInputElement>(`#file-${name}`);
-    if (!input) throw new Error(`missing input for ${name}`);
-    await user.upload(input, csvFile(name));
-  }
-}
-
-// El formulario precarga 4 CSV de ejemplo (ver DEFAULT_LOADED_FILES) al
+// El formulario precarga los 4 CSV de referencia (ver REFERENCE_FILES) al
 // montar, así que cualquier mock de fetch tiene que responder a esas
 // llamadas además de a la del submit — si no, `mockResolvedValueOnce`
 // termina respondiendo a la primera carga de ejemplo en vez de al POST.
@@ -28,6 +25,23 @@ function mockFetch(handleApiCall: (input: RequestInfo | URL) => Response | Promi
     }
     return handleApiCall(input);
   });
+}
+
+async function waitForReferenceFilesLoaded() {
+  await waitFor(() => expect(screen.getByRole("button", { name: /continuar/i })).toBeEnabled());
+}
+
+async function goToCaseSubstep(user: ReturnType<typeof userEvent.setup>) {
+  await waitForReferenceFilesLoaded();
+  await user.click(screen.getByRole("button", { name: /continuar/i }));
+}
+
+async function uploadRemainingFiles(user: ReturnType<typeof userEvent.setup>, container: HTMLElement) {
+  for (const name of REMAINING_FILES) {
+    const input = container.querySelector<HTMLInputElement>(`#file-${name}`);
+    if (!input) throw new Error(`missing input for ${name}`);
+    await user.upload(input, csvFile(name));
+  }
 }
 
 describe("FileUploadForm", () => {
@@ -45,19 +59,51 @@ describe("FileUploadForm", () => {
   it("preloads the reference CSVs (unidades_curriculares, turnos, semestres, carreras) by default", async () => {
     render(<FileUploadForm onCaseCreated={vi.fn()} />);
 
-    for (const name of ["unidades_curriculares", "turnos", "semestres", "carreras"]) {
+    for (const name of REFERENCE_FILES) {
       const row = screen.getByTestId(`file-row-${name}`);
       await waitFor(() => expect(row).toHaveTextContent(`${name}.csv`));
     }
   });
 
-  it("keeps the submit button disabled until all 14 files are selected", async () => {
+  it("only shows the reference files' inputs in the first substep", async () => {
+    render(<FileUploadForm onCaseCreated={vi.fn()} />);
+
+    for (const name of REFERENCE_FILES) {
+      expect(screen.getByTestId(`file-row-${name}`)).toBeInTheDocument();
+    }
+    for (const name of REMAINING_FILES) {
+      expect(screen.queryByTestId(`file-row-${name}`)).not.toBeInTheDocument();
+    }
+  });
+
+  it("moves to the case-specific substep once the reference files are ready, and back with Atrás", async () => {
+    const user = userEvent.setup();
+    render(<FileUploadForm onCaseCreated={vi.fn()} />);
+
+    await goToCaseSubstep(user);
+
+    for (const name of REMAINING_FILES) {
+      expect(screen.getByTestId(`file-row-${name}`)).toBeInTheDocument();
+    }
+    for (const name of REFERENCE_FILES) {
+      expect(screen.queryByTestId(`file-row-${name}`)).not.toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: /atrás/i }));
+
+    for (const name of REFERENCE_FILES) {
+      expect(screen.getByTestId(`file-row-${name}`)).toBeInTheDocument();
+    }
+  });
+
+  it("keeps the final submit disabled until all remaining files are selected, then enables it", async () => {
     const user = userEvent.setup();
     const { container } = render(<FileUploadForm onCaseCreated={vi.fn()} />);
 
+    await goToCaseSubstep(user);
     expect(screen.getByRole("button", { name: /continuar/i })).toBeDisabled();
 
-    await uploadAllRequiredFiles(user, container);
+    await uploadRemainingFiles(user, container);
 
     expect(screen.getByRole("button", { name: /continuar/i })).toBeEnabled();
   });
@@ -65,6 +111,8 @@ describe("FileUploadForm", () => {
   it("shows the selected filename for a single field once chosen", async () => {
     const user = userEvent.setup();
     const { container } = render(<FileUploadForm onCaseCreated={vi.fn()} />);
+
+    await goToCaseSubstep(user);
 
     const input = container.querySelector<HTMLInputElement>("#file-dias");
     expect(input).not.toBeNull();
@@ -91,7 +139,8 @@ describe("FileUploadForm", () => {
     );
 
     const { container } = render(<FileUploadForm onCaseCreated={onCaseCreated} />);
-    await uploadAllRequiredFiles(user, container);
+    await goToCaseSubstep(user);
+    await uploadRemainingFiles(user, container);
     await user.click(screen.getByRole("button", { name: /continuar/i }));
 
     await waitFor(() => expect(onCaseCreated).toHaveBeenCalledWith("abc123"));
@@ -116,10 +165,33 @@ describe("FileUploadForm", () => {
     );
 
     const { container } = render(<FileUploadForm onCaseCreated={vi.fn()} />);
-    await uploadAllRequiredFiles(user, container);
+    await goToCaseSubstep(user);
+    await uploadRemainingFiles(user, container);
     await user.click(screen.getByRole("button", { name: /continuar/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/alta_co/);
+  });
+
+  it("goes back to the reference substep when the validation error is for a reference file", async () => {
+    const user = userEvent.setup();
+    mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            error: "schema_validation_failed",
+            details: [{ file: "carreras", issue: "falta la columna 'codigo'" }],
+          }),
+          { status: 422 },
+        ),
+    );
+
+    const { container } = render(<FileUploadForm onCaseCreated={vi.fn()} />);
+    await goToCaseSubstep(user);
+    await uploadRemainingFiles(user, container);
+    await user.click(screen.getByRole("button", { name: /continuar/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/codigo/);
+    expect(screen.getByTestId("file-row-carreras")).toBeInTheDocument();
   });
 
   it("shows a generic error for a network/server failure", async () => {
@@ -129,7 +201,8 @@ describe("FileUploadForm", () => {
     });
 
     const { container } = render(<FileUploadForm onCaseCreated={vi.fn()} />);
-    await uploadAllRequiredFiles(user, container);
+    await goToCaseSubstep(user);
+    await uploadRemainingFiles(user, container);
     await user.click(screen.getByRole("button", { name: /continuar/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/failed to fetch/i);
