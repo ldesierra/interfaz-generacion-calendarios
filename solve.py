@@ -61,14 +61,41 @@ def _cop_conflict_groups(cop_pairs):
     return clique_groups, leftover_pairs
 
 
+def _load_sol_file(path):
+    """Lee un .sol de Gurobi/CBC (líneas "nombre_variable valor", comentarios con #)."""
+    values = {}
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            name, val = line.rsplit(" ", 1)
+            values[name] = float(val)
+    return values
+
+
 def solve_model(
-    source, solver_name: Solver, alpha: float, beta: float, time_limit_minutes=15
+    source,
+    solver_name: Solver,
+    alpha: float,
+    beta: float,
+    time_limit_minutes=15,
+    warm_start_sol=None,
 ) -> tuple[float, float, str, list, dict, str]:
     """
     Args:
         source: path a un directorio con los CSV del caso, o un dict
             {nombre_csv: archivo} con archivos subidos (ver
             csv_data_to_model_data.load_calendar_data).
+        warm_start_sol: path opcional a un .sol (formato Gurobi/CBC) con una
+            solución previa para usar como punto de partida (solo tiene
+            efecto con Solver.GUROBI_CMD). Encontrar la primera solución
+            factible desde cero puede ser muy lento en casos grandes; si ya
+            existe una solución conocida para el mismo caso (aunque haya
+            sido calculada con una versión anterior del modelo, con más o
+            menos pares de UC), pasarla acá deja que Gurobi arranque de ahí
+            en vez de buscar a ciegas. Variables del .sol que no existen en
+            el modelo actual se ignoran.
 
     Returns:
         (valor_objetivo, tiempo_ejecucion_seg, status, variables, uc_descriptions, solution_status)
@@ -135,6 +162,13 @@ def solve_model(
         z_plus[(c1, c2)] = pl.LpVariable(f"z_plus_{c1}_{c2}", lowBound=0)
         z_minus[(c1, c2)] = pl.LpVariable(f"z_minus_{c1}_{c2}", lowBound=0)
         y[(c1, c2)] = pl.LpVariable(f"y_{c1}_{c2}", cat=pl.LpBinary)
+
+    if warm_start_sol is not None:
+        seed_values = _load_sol_file(warm_start_sol)
+        for var_dict in (x, w, z, z_plus, z_minus, y):
+            for var in var_dict.values():
+                if var.name in seed_values:
+                    var.setInitialValue(seed_values[var.name], check=False)
     # endregion
 
     # region DEFINICIÓN DE LA FUNCIÓN OBJETIVO
@@ -281,6 +315,7 @@ def solve_model(
                 timeLimit=time_limit,
                 manageEnv=True,
                 envOptions=gurobi_env_options,
+                warmStart=warm_start_sol is not None,
                 Threads=cpu_cores,
                 MIPFocus=1,  # Enfocarse en encontrar soluciones factibles rápido
                 Presolve=2,  # Presolución agresiva

@@ -5,7 +5,12 @@ from datetime import datetime
 
 if __name__ == "__main__":
     value, time, status, variables, uc_descriptions, solution_status = solve_model(
-        Case.large_1s1p, Solver.GUROBI_CMD, 0.5, 0.5, 180
+        Case.large_1s1p,
+        Solver.GUROBI_CMD,
+        0.5,
+        0.5,
+        180,
+        warm_start_sol="solutions/1s1p-v2/seed.sol",
     )
 
     print("Status:", status, "-", solution_status)
