@@ -40,10 +40,39 @@ async function uploadFiles(
   names: readonly string[],
 ) {
   for (const name of names) {
+    if (name === "dias") {
+      await selectDia(user, container, 1);
+      continue;
+    }
+    if (name === "turnos_dias") {
+      await selectTurno(user, container, 1, "Mañana");
+      continue;
+    }
     const input = container.querySelector<HTMLInputElement>(`#file-${name}`);
     if (!input) throw new Error(`missing input for ${name}`);
     await user.upload(input, csvFile(name));
   }
+}
+
+/** Selecciona un día del mes actualmente visible en el calendario de "dias". */
+async function selectDia(user: ReturnType<typeof userEvent.setup>, container: HTMLElement, day: number) {
+  const cell = container.querySelector<HTMLButtonElement>(`[data-testid="dia-cell-${day}"]`);
+  if (!cell) throw new Error(`missing calendar cell for day ${day}`);
+  await user.click(cell);
+}
+
+/** Marca un turno para el día (id calculado, no día del mes) indicado en "turnos_dias". */
+async function selectTurno(
+  user: ReturnType<typeof userEvent.setup>,
+  container: HTMLElement,
+  diaId: number,
+  turnoLabel: "Mañana" | "Mediodía" | "Tarde",
+) {
+  const row = container.querySelector<HTMLElement>(`[data-testid="turno-row-${diaId}"]`);
+  if (!row) throw new Error(`missing turno row for día ${diaId}`);
+  const button = Array.from(row.querySelectorAll("button")).find((b) => b.textContent === turnoLabel);
+  if (!button) throw new Error(`missing turno button "${turnoLabel}" for día ${diaId}`);
+  await user.click(button);
 }
 
 /** Avanza del substep 1 (referencia, precargado) al substep 2 (trayectoria/previas/inscriptos/coincidencia). */
@@ -142,19 +171,50 @@ describe("FileUploadForm", () => {
     expect(screen.getByRole("button", { name: /continuar/i })).toBeEnabled();
   });
 
-  it("shows the selected filename for a single field once chosen", async () => {
+  it("marks selected calendar days with a running id and reflects the count", async () => {
     const user = userEvent.setup();
     const { container } = render(<FileUploadForm onCaseCreated={vi.fn()} />);
 
     await goToCaseSubstep(user, container);
 
-    const input = container.querySelector<HTMLInputElement>("#file-dias");
-    expect(input).not.toBeNull();
-    await user.upload(input!, csvFile("dias"));
-
     const diasRow = screen.getByText("Días").closest("li");
     expect(diasRow).not.toBeNull();
-    expect(diasRow).toHaveTextContent("dias.csv");
+    expect(diasRow).toHaveTextContent("sin días seleccionados");
+
+    await selectDia(user, container, 1);
+    expect(diasRow).toHaveTextContent("1 día(s) seleccionado(s)");
+    expect(container.querySelector('[data-testid="dia-cell-1"]')).toHaveTextContent("1");
+
+    await selectDia(user, container, 3);
+    expect(diasRow).toHaveTextContent("2 día(s) seleccionado(s)");
+    // Día 2 no fue seleccionado, así que el día 3 salta directo al id 3.
+    expect(container.querySelector('[data-testid="dia-cell-3"]')).toHaveTextContent("3");
+  });
+
+  it("shows one turno row per selected día, dynamically, and toggles turnos on/off", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<FileUploadForm onCaseCreated={vi.fn()} />);
+
+    await goToCaseSubstep(user, container);
+
+    expect(container.querySelector('[data-testid="turno-row-1"]')).not.toBeInTheDocument();
+
+    await selectDia(user, container, 1);
+    expect(container.querySelector('[data-testid="turno-row-1"]')).toBeInTheDocument();
+
+    await selectDia(user, container, 3);
+    expect(container.querySelector('[data-testid="turno-row-1"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="turno-row-3"]')).toBeInTheDocument();
+
+    const mananaButton = Array.from(
+      container.querySelector('[data-testid="turno-row-1"]')!.querySelectorAll("button"),
+    ).find((b) => b.textContent === "Mañana")!;
+
+    expect(mananaButton).toHaveAttribute("aria-pressed", "false");
+    await user.click(mananaButton);
+    expect(mananaButton).toHaveAttribute("aria-pressed", "true");
+    await user.click(mananaButton);
+    expect(mananaButton).toHaveAttribute("aria-pressed", "false");
   });
 
   it("submits the case and calls onCaseCreated on success", async () => {
