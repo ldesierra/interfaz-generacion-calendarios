@@ -150,3 +150,36 @@ def test_unreadable_csv_reported_with_clear_message():
     assert [(i.file, i.issue) for i in issues] == [
         ("capacidad", "el archivo está vacío")
     ]
+
+
+def test_preasignaciones_referencing_a_turno_missing_from_turnos_dias_is_reported():
+    # dias/turnos_dias los arma el calendario del frontend; si preasignaciones
+    # (un CSV subido aparte) queda con un día/turno que no está en ese
+    # calendario, antes esto no se detectaba acá y el solve rompía más
+    # adelante con un KeyError críptico (`x[c, d, t]`, ver solve.solve_model).
+    files = _load_case_files("caso_1s1p")
+    files["dias"] = BytesIO(b"id\n1\n")
+    files["turnos_dias"] = BytesIO(b"id_dia,id_turno\n1,1\n1,2\n")
+
+    issues = validate_case_files(files)
+
+    assert [(i.file, i.issue) for i in issues] == [
+        (
+            "preasignaciones",
+            "20 combinación(es) de día/turno no existen en turnos_dias: "
+            "día 6 turno 1, día 6 turno 2, día 6 turno 3 (y 17 más) — revisá "
+            "que coincidan con el calendario elegido",
+        )
+    ]
+
+
+def test_preasignaciones_matching_turnos_dias_is_valid():
+    files = _load_case_files("caso_1s1p")
+    files["preasignaciones"] = BytesIO(
+        b"unidad_curricular,dia,turno\n1122,1,1\n"
+    )
+    files["turnos_dias"] = BytesIO(b"id_dia,id_turno\n1,1\n1,2\n")
+
+    issues = validate_case_files(files)
+
+    assert issues == []

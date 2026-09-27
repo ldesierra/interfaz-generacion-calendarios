@@ -15,8 +15,8 @@ describe("ParamsForm", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       alpha: 0.5,
       beta: 0.5,
-      solver: "PULP_CBC_CMD",
-      time_limit_minutes: 15,
+      solver: "GUROBI_CMD",
+      time_limit_minutes: 180,
       nombre_corrida: "caso 1",
     });
   });
@@ -34,6 +34,22 @@ describe("ParamsForm", () => {
 
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ alpha: 0.25, beta: 1, time_limit_minutes: 60 }),
+    );
+  });
+
+  it("lets the user switch between the Gurobi and CBC solvers", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    render(<ParamsForm onSubmit={onSubmit} />);
+
+    expect(screen.getByLabelText(/solver/i)).toHaveValue("GUROBI_CMD");
+
+    await user.type(screen.getByLabelText(/nombre del caso/i), "caso-3");
+    await user.selectOptions(screen.getByLabelText(/solver/i), "PULP_CBC_CMD");
+    await user.click(screen.getByRole("button", { name: /ejecutar modelo/i }));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ solver: "PULP_CBC_CMD" }),
     );
   });
 

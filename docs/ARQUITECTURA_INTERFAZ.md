@@ -7,7 +7,7 @@ Diseño para **Tarea 1, subtarea 1** de `PLAN_INTERFAZ_CALENDARIO.md`. Cubre end
 - Backend: **FastAPI** (async nativo, validación de request/response con Pydantic, encaja con el endpoint de status/polling de la subtarea 5).
 - Frontend: **React**.
 - Deploy: Vercel free tier, un solo usuario, sin concurrencia.
-- Solver: `PULP_CBC_CMD` únicamente.
+- Solver: `PULP_CBC_CMD` o `GUROBI_CMD` (selector en el frontend; Gurobi requiere licencia WLS vía `GRB_WLSACCESSID`/`GRB_WLSSECRET`/`GRB_LICENSEID` en el entorno del backend).
 
 ## 2. Flujo end-to-end
 
@@ -58,7 +58,7 @@ Dispara una corrida del modelo sobre un caso ya cargado.
   ```json
   { "alpha": 0.5, "beta": 0.5, "solver": "PULP_CBC_CMD", "time_limit_minutes": 15, "nombre_corrida": "corrida-1" }
   ```
-  - `solver`: fijo a `PULP_CBC_CMD` en el MVP (único disponible en free tier, según Supuestos), pero se deja el campo por si se habilita Gurobi (licencia estudiante) más adelante.
+  - `solver`: `"PULP_CBC_CMD"` o `"GUROBI_CMD"` (ver `backend/app/schemas/job.py`); el frontend lo expone como selector.
 - Response `202`:
   ```json
   { "job_id": "7f3a...", "case_id": "b1e2...", "status": "pending" }

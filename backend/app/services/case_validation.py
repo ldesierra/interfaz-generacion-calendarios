@@ -133,6 +133,69 @@ def _validate_file(name: str, file_obj: Optional[IO[bytes]]) -> list[ValidationI
     return issues
 
 
+def _validate_preasignaciones_reference_turnos_dias(
+    files: dict[str, Optional[IO[bytes]]]
+) -> list[ValidationIssue]:
+    """Chequea que cada (dia, turno) de `preasignaciones` exista en `turnos_dias`.
+
+    `dias`/`turnos_dias` los arma el calendario del frontend, mientras que
+    `preasignaciones` es un CSV subido aparte — si no coinciden (p.ej. un
+    `preasignaciones.csv` de otro caso, con otros ids de día), el solve
+    rompe más adelante con un `KeyError` críptico sobre `x[c, d, t]`
+    (ver `solve.solve_model`, restricción "PreAsignacion_"). Se valida acá
+    para dar un 422 claro en vez de ese crash.
+    """
+    pa_file = files.get("preasignaciones")
+    td_file = files.get("turnos_dias")
+    if pa_file is None or td_file is None:
+        return []
+
+    pa_file.seek(0)
+    td_file.seek(0)
+    try:
+        pa_df = pd.read_csv(pa_file)
+        td_df = pd.read_csv(td_file)
+    except Exception:
+        # Ya se reporta desde _validate_file; no duplicar el error acá.
+        return []
+
+    required_pa = {"unidad_curricular", "dia", "turno"}
+    required_td = {"id_dia", "id_turno"}
+    if not required_pa.issubset(pa_df.columns) or not required_td.issubset(td_df.columns):
+        return []
+
+    valid_pairs = set(zip(td_df["id_dia"], td_df["id_turno"]))
+    invalid_pairs: list[tuple] = []
+    seen: set[tuple] = set()
+    for _, row in pa_df.iterrows():
+        pair = (row["dia"], row["turno"])
+        if pair not in valid_pairs and pair not in seen:
+            seen.add(pair)
+            invalid_pairs.append(pair)
+
+    if not invalid_pairs:
+        return []
+
+    # Un CSV desalineado con el calendario puede tener decenas de filas
+    # inválidas — se resume en un único issue (con algunos ejemplos) en vez
+    # de uno por combinación, para no inundar la respuesta.
+    ejemplos = ", ".join(f"día {d} turno {t}" for d, t in invalid_pairs[:3])
+    restantes = len(invalid_pairs) - 3
+    if restantes > 0:
+        ejemplos += f" (y {restantes} más)"
+
+    return [
+        ValidationIssue(
+            file="preasignaciones",
+            issue=(
+                f"{len(invalid_pairs)} combinación(es) de día/turno no existen en "
+                f"turnos_dias: {ejemplos} — revisá que coincidan con el calendario "
+                "elegido"
+            ),
+        )
+    ]
+
+
 def validate_case_files(
     files: dict[str, Optional[IO[bytes]]]
 ) -> list[ValidationIssue]:
@@ -145,4 +208,8 @@ def validate_case_files(
     issues: list[ValidationIssue] = []
     for name in REQUIRED_FILES:
         issues.extend(_validate_file(name, files.get(name)))
+
+    if not issues:
+        issues.extend(_validate_preasignaciones_reference_turnos_dias(files))
+
     return issues

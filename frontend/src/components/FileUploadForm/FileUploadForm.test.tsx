@@ -6,10 +6,11 @@ import { FileUploadForm } from "./FileUploadForm";
 
 const REFERENCE_FILES = ["unidades_curriculares", "turnos", "semestres", "carreras"] as const;
 const OVERLAP_FILES = ["trayectoria_sugerida", "previas", "inscriptos", "coincidencia"] as const;
+const SUBSTEP2_FILES = [...OVERLAP_FILES, "preasignaciones", "profesores"] as const;
 const CASE_FILES = REQUIRED_FILES.filter(
   (name) =>
     !(REFERENCE_FILES as readonly string[]).includes(name) &&
-    !(OVERLAP_FILES as readonly string[]).includes(name),
+    !(SUBSTEP2_FILES as readonly string[]).includes(name),
 );
 
 function csvFile(name: string) {
@@ -48,10 +49,50 @@ async function uploadFiles(
       await selectTurno(user, container, 1, "Mañana");
       continue;
     }
+    if (name === "capacidad") {
+      await fillCapacidad(user, container, 1, 1);
+      continue;
+    }
+    if (name === "datos") {
+      await fillDatos(user, container);
+      continue;
+    }
     const input = container.querySelector<HTMLInputElement>(`#file-${name}`);
     if (!input) throw new Error(`missing input for ${name}`);
     await user.upload(input, csvFile(name));
   }
+}
+
+/** Completa la capacidad del par (día, turno) indicado en "capacidad". */
+async function fillCapacidad(
+  user: ReturnType<typeof userEvent.setup>,
+  container: HTMLElement,
+  diaId: number,
+  turnoId: number,
+  value = "100",
+) {
+  const row = container.querySelector<HTMLElement>(`[data-testid="capacidad-row-${diaId}-${turnoId}"]`);
+  if (!row) throw new Error(`missing capacidad row for día ${diaId} turno ${turnoId}`);
+  const input = row.querySelector<HTMLInputElement>("input");
+  if (!input) throw new Error(`missing capacidad input for día ${diaId} turno ${turnoId}`);
+  await user.clear(input);
+  await user.type(input, value);
+}
+
+/** Completa fac_cp y alta_co en "datos". */
+async function fillDatos(
+  user: ReturnType<typeof userEvent.setup>,
+  container: HTMLElement,
+  facCp = "0.8",
+  altaCo = "40",
+) {
+  const row = container.querySelector<HTMLElement>('[data-testid="file-row-datos"]');
+  if (!row) throw new Error("missing file-row-datos");
+  const inputs = row.querySelectorAll<HTMLInputElement>("input");
+  await user.clear(inputs[0]);
+  await user.type(inputs[0], facCp);
+  await user.clear(inputs[1]);
+  await user.type(inputs[1], altaCo);
 }
 
 /** Selecciona un día del mes actualmente visible en el calendario de "dias". */
@@ -75,7 +116,7 @@ async function selectTurno(
   await user.click(button);
 }
 
-/** Avanza del substep 1 (referencia, precargado) al substep 2 (trayectoria/previas/inscriptos/coincidencia). */
+/** Avanza del substep 1 (referencia, precargado) al substep 2 (trayectoria/previas/inscriptos/coincidencia/preasignaciones/profesores). */
 async function goToOverlapSubstep(user: ReturnType<typeof userEvent.setup>) {
   await waitFor(() => expect(screen.getByRole("button", { name: /continuar/i })).toBeEnabled());
   await clickContinuar(user);
@@ -84,7 +125,7 @@ async function goToOverlapSubstep(user: ReturnType<typeof userEvent.setup>) {
 /** Avanza del substep 1 hasta el substep 3 (final), completando el substep 2 en el camino. */
 async function goToCaseSubstep(user: ReturnType<typeof userEvent.setup>, container: HTMLElement) {
   await goToOverlapSubstep(user);
-  await uploadFiles(user, container, OVERLAP_FILES);
+  await uploadFiles(user, container, SUBSTEP2_FILES);
   await clickContinuar(user);
 }
 
@@ -116,26 +157,26 @@ describe("FileUploadForm", () => {
     for (const name of REFERENCE_FILES) {
       expect(screen.getByTestId(`file-row-${name}`)).toBeInTheDocument();
     }
-    for (const name of [...OVERLAP_FILES, ...CASE_FILES]) {
+    for (const name of [...SUBSTEP2_FILES, ...CASE_FILES]) {
       expect(screen.queryByTestId(`file-row-${name}`)).not.toBeInTheDocument();
     }
 
     await goToOverlapSubstep(user);
 
-    for (const name of OVERLAP_FILES) {
+    for (const name of SUBSTEP2_FILES) {
       expect(screen.getByTestId(`file-row-${name}`)).toBeInTheDocument();
     }
     for (const name of [...REFERENCE_FILES, ...CASE_FILES]) {
       expect(screen.queryByTestId(`file-row-${name}`)).not.toBeInTheDocument();
     }
 
-    await uploadFiles(user, container, OVERLAP_FILES);
+    await uploadFiles(user, container, SUBSTEP2_FILES);
     await clickContinuar(user);
 
     for (const name of CASE_FILES) {
       expect(screen.getByTestId(`file-row-${name}`)).toBeInTheDocument();
     }
-    for (const name of [...REFERENCE_FILES, ...OVERLAP_FILES]) {
+    for (const name of [...REFERENCE_FILES, ...SUBSTEP2_FILES]) {
       expect(screen.queryByTestId(`file-row-${name}`)).not.toBeInTheDocument();
     }
   });
@@ -148,7 +189,7 @@ describe("FileUploadForm", () => {
     expect(screen.getByTestId(`file-row-${CASE_FILES[0]}`)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /atrás/i }));
-    for (const name of OVERLAP_FILES) {
+    for (const name of SUBSTEP2_FILES) {
       expect(screen.getByTestId(`file-row-${name}`)).toBeInTheDocument();
     }
 

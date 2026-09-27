@@ -27,6 +27,7 @@ async def solve_case(case_id: str, request: SolveRequest):
     job = start_solve_job(
         case_id=case_id,
         nombre_corrida=request.nombre_corrida,
+        solver=request.solver,
         alpha=request.alpha,
         beta=request.beta,
         time_limit_minutes=request.time_limit_minutes,
