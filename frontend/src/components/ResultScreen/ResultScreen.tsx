@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, Download, RotateCcw } from "lucide-react";
-import { ApiError, getJobResult, jobDownloadUrl } from "../../api/client";
+import { ApiError, getJobResult, jobDownloadUrl, jobWarmStartDownloadUrl } from "../../api/client";
 import type { JobResultResponse } from "../../api/types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
@@ -138,6 +138,13 @@ export function ResultScreen({ jobId, onRestart }: ResultScreenProps) {
         <a className={cn(buttonVariants({ variant: "default" }))} href={jobDownloadUrl(jobId)}>
           <Download />
           Descargar CSV
+        </a>
+        <a
+          className={cn(buttonVariants({ variant: "outline" }))}
+          href={jobWarmStartDownloadUrl(jobId)}
+        >
+          <Download />
+          Descargar warm start
         </a>
         <RestartButton onRestart={onRestart} />
       </div>

@@ -8,12 +8,15 @@ import {
   type TimeLimitMinutes,
   type Weight,
 } from "../../api/types";
-import { Button } from "../ui/button";
+import { Button, buttonVariants } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select } from "../ui/select";
+import { cn } from "../../lib/utils";
 
 const NOMBRE_CORRIDA_PATTERN = /^[\w\- ]+$/;
+const WARM_START_SOLVER: Solver = "GUROBI_CMD";
 
 const DEFAULT_PARAMS: SolveParams = {
   alpha: 0.5,
@@ -21,10 +24,11 @@ const DEFAULT_PARAMS: SolveParams = {
   solver: SOLVERS[0],
   time_limit_minutes: 180,
   nombre_corrida: "",
+  warm_start: false,
 };
 
 interface ParamsFormProps {
-  onSubmit: (params: SolveParams) => void;
+  onSubmit: (params: SolveParams, warmStartFile: File | null) => void;
   submitting?: boolean;
   initialValues?: Partial<SolveParams>;
 }
@@ -49,15 +53,27 @@ export function ParamsForm({ onSubmit, submitting = false, initialValues }: Para
     ...initialValues,
   });
   const [nombreError, setNombreError] = useState<string | null>(null);
+  const [warmStartFile, setWarmStartFile] = useState<File | null>(null);
+  const [warmStartError, setWarmStartError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const error = validateNombreCorrida(values.nombre_corrida);
     setNombreError(error);
-    if (error) {
+
+    let fileError: string | null = null;
+    if (values.warm_start && !warmStartFile) {
+      fileError = "Elegí un archivo de warm start, o desmarcá la opción.";
+    }
+    setWarmStartError(fileError);
+
+    if (error || fileError) {
       return;
     }
-    onSubmit({ ...values, nombre_corrida: values.nombre_corrida.trim() });
+    onSubmit(
+      { ...values, nombre_corrida: values.nombre_corrida.trim() },
+      values.warm_start ? warmStartFile : null,
+    );
   }
 
   return (
@@ -144,7 +160,14 @@ export function ParamsForm({ onSubmit, submitting = false, initialValues }: Para
           <Select
             id="solver"
             value={values.solver}
-            onChange={(event) => setValues((prev) => ({ ...prev, solver: event.target.value as Solver }))}
+            onChange={(event) => {
+              const solver = event.target.value as Solver;
+              setValues((prev) => ({
+                ...prev,
+                solver,
+                warm_start: solver === WARM_START_SOLVER ? prev.warm_start : false,
+              }));
+            }}
           >
             {SOLVERS.map((solver) => (
               <option key={solver} value={solver}>
@@ -153,6 +176,61 @@ export function ParamsForm({ onSubmit, submitting = false, initialValues }: Para
             ))}
           </Select>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5 rounded-md border border-border px-3 py-2.5">
+        <Label
+          htmlFor="warm_start"
+          className={cn(values.solver !== WARM_START_SOLVER && "opacity-50")}
+        >
+          <Checkbox
+            id="warm_start"
+            checked={values.warm_start}
+            disabled={values.solver !== WARM_START_SOLVER}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              setValues((prev) => ({ ...prev, warm_start: checked }));
+              if (!checked) {
+                setWarmStartError(null);
+              }
+            }}
+          />
+          Usar warm start
+        </Label>
+        <p className="text-xs text-muted-foreground">
+          {values.solver === WARM_START_SOLVER
+            ? "Le pasa al solver los valores de una solución previa (CSV con \"nombre_variable,valor\" por línea) para arrancar de ahí en vez de buscar a ciegas. Usá el botón \"Descargar warm start\" del resultado de una corrida anterior de este caso — el CSV del calendario no sirve para esto."
+            : "Sólo tiene efecto con el solver GUROBI_CMD."}
+        </p>
+
+        {values.warm_start && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+            <input
+              id="warm_start_file"
+              type="file"
+              accept=".csv"
+              onChange={(event) => {
+                setWarmStartFile(event.target.files?.[0] ?? null);
+                setWarmStartError(null);
+              }}
+              className="sr-only"
+            />
+            <Label
+              htmlFor="warm_start_file"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "cursor-pointer")}
+            >
+              Elegir archivo
+            </Label>
+            <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+              {warmStartFile ? warmStartFile.name : "sin archivo"}
+            </span>
+          </div>
+        )}
+        {warmStartError && (
+          <p className="text-xs text-destructive" role="alert">
+            {warmStartError}
+          </p>
+        )}
       </div>
 
       <Button type="submit" disabled={submitting} className="self-end mb-3">

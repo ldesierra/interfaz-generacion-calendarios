@@ -62,15 +62,26 @@ def _cop_conflict_groups(cop_pairs):
 
 
 def _load_sol_file(path):
-    """Lee un .sol de Gurobi/CBC (líneas "nombre_variable valor", comentarios con #)."""
+    """Lee un warm start con los valores de una solución previa.
+
+    Acepta tanto un .sol de Gurobi/CBC (líneas "nombre_variable valor") como
+    un CSV de dos columnas (líneas "nombre_variable,valor"). Comentarios con #.
+    """
     values = {}
     with open(path) as f:
-        for line in f:
+        for line_number, line in enumerate(f, start=1):
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            name, val = line.rsplit(" ", 1)
-            values[name] = float(val)
+            name, _, val = line.rpartition(",") if "," in line else line.rpartition(" ")
+            try:
+                values[name.strip()] = float(val)
+            except ValueError:
+                raise ValueError(
+                    f"El archivo de warm start no tiene el formato esperado en la línea "
+                    f"{line_number} (se espera 'nombre_variable,valor' o 'nombre_variable "
+                    f"valor'): {line!r}"
+                ) from None
     return values
 
 

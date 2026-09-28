@@ -53,6 +53,7 @@ export interface SolveParams {
   solver: Solver;
   time_limit_minutes: TimeLimitMinutes;
   nombre_corrida: string;
+  warm_start: boolean;
 }
 
 export interface SolveAccepted {

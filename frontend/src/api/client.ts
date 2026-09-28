@@ -59,6 +59,20 @@ export async function createCase(files: Record<RequiredFileName, File>): Promise
   throw new ApiError(await parseJsonError(response), response.status);
 }
 
+export async function uploadWarmStart(caseId: string, file: File): Promise<void> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`/api/cases/${caseId}/warm-start`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (response.status !== 204) {
+    throw new ApiError(await parseJsonError(response), response.status);
+  }
+}
+
 export async function solveCase(caseId: string, params: SolveParams): Promise<SolveAccepted> {
   const response = await fetch(`/api/cases/${caseId}/solve`, {
     method: "POST",
@@ -90,4 +104,8 @@ export async function getJobResult(jobId: string): Promise<JobResultResponse> {
 
 export function jobDownloadUrl(jobId: string): string {
   return `/api/jobs/${jobId}/download`;
+}
+
+export function jobWarmStartDownloadUrl(jobId: string): string {
+  return `/api/jobs/${jobId}/warm-start-download`;
 }

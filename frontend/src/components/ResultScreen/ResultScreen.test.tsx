@@ -39,6 +39,8 @@ describe("ResultScreen", () => {
     expect(await screen.findByText("UC B (B)")).toBeInTheDocument();
     const downloadLink = screen.getByRole("link", { name: /descargar csv/i });
     expect(downloadLink).toHaveAttribute("href", "/api/jobs/job-1/download");
+    const warmStartLink = screen.getByRole("link", { name: /descargar warm start/i });
+    expect(warmStartLink).toHaveAttribute("href", "/api/jobs/job-1/warm-start-download");
   });
 
   it("shows a friendly message with no schedule when infeasible", async () => {

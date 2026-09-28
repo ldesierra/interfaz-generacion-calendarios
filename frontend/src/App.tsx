@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ApiError, solveCase } from "./api/client";
+import { ApiError, solveCase, uploadWarmStart } from "./api/client";
 import type { JobStatusResponse, SolveParams } from "./api/types";
 import { FileUploadForm } from "./components/FileUploadForm/FileUploadForm";
 import { ParamsForm } from "./components/ParamsForm/ParamsForm";
@@ -27,10 +27,13 @@ function App() {
   const [solveError, setSolveError] = useState<string | null>(null);
   const [submittingParams, setSubmittingParams] = useState(false);
 
-  async function handleSolve(caseId: string, params: SolveParams) {
+  async function handleSolve(caseId: string, params: SolveParams, warmStartFile: File | null) {
     setSubmittingParams(true);
     setSolveError(null);
     try {
+      if (params.warm_start && warmStartFile) {
+        await uploadWarmStart(caseId, warmStartFile);
+      }
       const accepted = await solveCase(caseId, params);
       setStep({ kind: "progress", jobId: accepted.job_id });
     } catch (err) {
@@ -102,7 +105,9 @@ function App() {
               <CardContent className="flex flex-col gap-4">
                 <ParamsForm
                   submitting={submittingParams}
-                  onSubmit={(params) => handleSolve(step.caseId, params)}
+                  onSubmit={(params, warmStartFile) =>
+                    handleSolve(step.caseId, params, warmStartFile)
+                  }
                 />
                 {solveError && (
                   <Alert variant="destructive">
