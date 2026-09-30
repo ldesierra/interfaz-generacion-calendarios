@@ -20,11 +20,11 @@ Diseño para **Tarea 1, subtarea 1** de `PLAN_INTERFAZ_CALENDARIO.md`. Cubre end
 6. Usuario descarga el CSV                ──▶  GET  /api/jobs/{id}/download
 ```
 
-Esto mapea directo a las funciones que ya existen en el repo:
+Esto mapea directo a las funciones que ya existen en el repo (actualizado tras la subtarea 2, ver `PLAN_INTERFAZ_CALENDARIO.md`):
 
-- `csv_data_to_model_data.load_calendar_data(dir_name)` — hoy lee de un directorio fijo en disco. La subtarea 2 la adapta para recibir los archivos subidos (via un directorio temporal por `case_id`, ver §5).
-- `solve.solve_model(dir_name, solver_name, alpha, beta, time_limit_minutes)` — sin cambios de firma; se ejecuta en background (subtarea 5).
-- `generate_schedule.generate_schedule_csv(variables, csv_name)` — genera el calendario resultante. **Nota:** hoy tiene hardcodeado `data/unidades_curriculares.csv` (línea 28) en vez de usar el directorio del caso — hay que corregirlo en la subtarea 2 para que lea del mismo `case_id`, si no las descripciones de UC van a salir mal (o van a fallar) para cualquier caso que no sea el que está en `data/`.
+- `csv_data_to_model_data.load_calendar_data(source)` — acepta un `dir_name` (path a un directorio, comportamiento anterior, usado por `main.py` y los scripts de evaluación) o un `dict {nombre_csv: archivo}` con los archivos subidos (cualquier cosa que `pandas.read_csv` acepte: un `UploadFile.file`, un `BytesIO`, etc.), sin volcarlos a disco primero. También devuelve `uc_descriptions` (dict `{codigo: "nombre (codigo)"}`) armado a partir de `unidades_curriculares.csv` del propio caso.
+- `solve.solve_model(source, solver_name, alpha, beta, time_limit_minutes)` — mismo `source` que arriba; ahora devuelve también `uc_descriptions` para no tener que releer los archivos subidos después del solve. Se ejecuta en background (subtarea 5, sin resolver todavía).
+- `generate_schedule.generate_schedule_csv(variables, uc_descriptions, csv_name)` — ya no lee `data/unidades_curriculares.csv` hardcodeado; recibe las descripciones como parámetro. **Corregido en la subtarea 2** junto con un hallazgo adicional: los casos grandes no tienen columna `descripcion` en `unidades_curriculares.csv`, sino `unidad_curricular` (ver §4) — de haberse implementado ingenuamente sólo con `descripcion` como asumía este documento originalmente, habría roto con cualquier caso real.
 
 ## 3. Endpoints
 
@@ -98,12 +98,12 @@ Devuelve el CSV del calendario (`Content-Disposition: attachment`) generado por 
 
 ## 4. Contrato de columnas por CSV (para la validación de `POST /api/cases`)
 
-Relevado de `casos/caso_sm` y `casos/caso_1s1p` (ver `csv_data_to_model_data.load_csv`):
+Relevado de `casos/caso_sm` y `casos/caso_1s1p/1s2p/2s1p/2s2p/md` (ver `csv_data_to_model_data.load_csv`):
 
 | Archivo | Columnas requeridas |
 |---|---|
 | `dias.csv` | `id` |
-| `unidades_curriculares.csv` | `codigo`, `descripcion` |
+| `unidades_curriculares.csv` | `codigo` + (`descripcion` **o** `unidad_curricular`, ver nota) |
 | `turnos.csv` | `id` |
 | `turnos_dias.csv` | `id_dia`, `id_turno` |
 | `semestres.csv` | `id` |
@@ -117,7 +117,9 @@ Relevado de `casos/caso_sm` y `casos/caso_1s1p` (ver `csv_data_to_model_data.loa
 | `coincidencia.csv` | `uc_1`, `uc_2`, `coincidencia` |
 | `datos.csv` | `fac_cp`, `alta_co` (una sola fila) |
 
-**Nota de un caso real encontrado:** `casos/caso_sm/datos.csv` sólo tiene `fac_cp`, sin `alta_co` — con el `csv_data_to_model_data.py` actual eso rompe (`datos["alta_co"]` no existe). El validador de `POST /api/cases` tiene que detectar esto y devolver un 422 claro en vez de dejar que reviente más adelante en el solve.
+**Notas de datos reales, confirmadas al implementar la subtarea 2:**
+- `unidades_curriculares.csv` **no** tiene siempre la columna `descripcion`: `caso_sm` usa `codigo,descripcion`, pero los casos grandes (`caso_1s1p`, `1s2p`, `2s1p`, `2s2p`, `caso_md`) usan `unidad_curricular,codigo`, donde `unidad_curricular` es el nombre completo (ej. `Geometria y Algebra lineal 1,1030`). `load_calendar_data` ahora acepta cualquiera de las dos (`descripcion` o `unidad_curricular`), con fallback al propio código si no está ninguna. El validador de `POST /api/cases` debe aceptar ambas variantes, no exigir `descripcion` a secas.
+- `casos/caso_sm/datos.csv` y `casos/caso_md/datos.csv` sólo tienen `fac_cp`, sin `alta_co` — con el código actual eso rompe (`datos["alta_co"]` no existe). El validador de `POST /api/cases` tiene que detectar esto y devolver un 422 claro en vez de dejar que reviente más adelante en el solve.
 
 ## 5. Estructura de carpetas propuesta
 
