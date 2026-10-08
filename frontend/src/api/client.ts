@@ -169,3 +169,29 @@ export async function putChanges(caseId: string, changes: UcChange[]): Promise<U
   }
   throw new ApiError(await parseJsonError(response), response.status);
 }
+
+export async function uploadCalendar(caseId: string, file: File): Promise<{ evaluaciones: number }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`/api/cases/${caseId}/calendar`, { method: "PUT", body: formData });
+  if (!response.ok) {
+    throw new ApiError(await parseJsonError(response), response.status);
+  }
+  return response.json();
+}
+
+export interface DerivedCase {
+  derived_case_id: string;
+  fixed_ucs: number;
+  free_ucs: string[];
+  warnings: string[];
+}
+
+// Arma el caso derivado (calendario vigente + cambios); se resuelve con solveCase().
+export async function deriveCase(caseId: string): Promise<DerivedCase> {
+  const response = await fetch(`/api/cases/${caseId}/derive`, { method: "POST" });
+  if (response.status !== 201) {
+    throw new ApiError(await parseJsonError(response), response.status);
+  }
+  return response.json();
+}

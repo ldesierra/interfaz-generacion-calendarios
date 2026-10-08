@@ -1,39 +1,35 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CalendarioTable } from "../components/CalendarioUpload/CalendarioTable";
-import { CambiosStep } from "../components/CambiosStep/CambiosStep";
+import {
+  ApiError,
+  deriveCase,
+  solveCase,
+  uploadCalendar,
+  uploadWarmStart,
+  type DerivedCase,
+} from "../api/client";
+import type { SolveParams, UcChange } from "../api/types";
 import { CalendarioUpload } from "../components/CalendarioUpload/CalendarioUpload";
+import { CambiosStep } from "../components/CambiosStep/CambiosStep";
 import { FileUploadForm } from "../components/FileUploadForm/FileUploadForm";
-import { Button } from "../components/ui/button";
+import { ParamsForm } from "../components/ParamsForm/ParamsForm";
+import { ProgressScreen } from "../components/ProgressScreen/ProgressScreen";
+import { ResultScreen } from "../components/ResultScreen/ResultScreen";
+import { Alert, AlertDescription } from "../components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import type { UcChange } from "../api/types";
 import type { CalendarioExistente } from "../lib/calendario";
 import { cn } from "../lib/utils";
 
-type Step =
-  | { kind: "calendario" }
-  | { kind: "datos"; calendario: CalendarioExistente; calendarioFile: File }
-  | {
-      kind: "cambio";
-      calendario: CalendarioExistente;
-      calendarioFile: File;
-      caseId: string;
-      changes: UcChange[];
-    }
-  // Subtarea 4 (armar el caso derivado y resolver) arranca desde acá.
-  | {
-      kind: "guardado";
-      calendario: CalendarioExistente;
-      calendarioFile: File;
-      caseId: string;
-      changes: UcChange[];
-    };
+type StepKind = "calendario" | "datos" | "cambio" | "params" | "progress" | "result";
 
-const STEPS = [
-  { kind: "calendario", label: "Calendario vigente" },
-  { kind: "datos", label: "Datos del caso" },
-  { kind: "cambio", label: "Cambio" },
-] as const;
+const STEPS: { kind: StepKind; label: string }[] = [
+  { kind: "calendario", label: "Calendario" },
+  { kind: "datos", label: "Datos" },
+  { kind: "cambio", label: "Cambios" },
+  { kind: "params", label: "Parámetros" },
+  { kind: "progress", label: "Ejecución" },
+  { kind: "result", label: "Resultado" },
+];
 
 function calendarioCodigos(calendario: CalendarioExistente): Set<string> {
   const codigos = new Set<string>();
@@ -45,9 +41,84 @@ function calendarioCodigos(calendario: CalendarioExistente): Set<string> {
   return codigos;
 }
 
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError || err instanceof Error ? err.message : fallback;
+}
+
 export function ModificacionPage() {
-  const [step, setStep] = useState<Step>({ kind: "calendario" });
-  const currentIndex = STEPS.findIndex((s) => s.kind === (step.kind === "guardado" ? "cambio" : step.kind));
+  const [step, setStep] = useState<StepKind>("calendario");
+  const [calendario, setCalendario] = useState<{ data: CalendarioExistente; file: File } | null>(null);
+  const [caseId, setCaseId] = useState<string | null>(null);
+  const [changes, setChanges] = useState<UcChange[]>([]);
+  const [derived, setDerived] = useState<DerivedCase | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentIndex = STEPS.findIndex((s) => s.kind === step);
+
+  function goTo(next: StepKind) {
+    setError(null);
+    setStep(next);
+  }
+
+  // El calendario se sube al backend apenas existe el caso: ahí se valida
+  // contra los datos (UCs, días y turnos) y, si no cuadra, el usuario corrige
+  // los archivos sin avanzar.
+  async function handleCaseCreated(newCaseId: string) {
+    if (!calendario) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await uploadCalendar(newCaseId, calendario.file);
+      setCaseId(newCaseId);
+      setChanges([]);
+      setStep("cambio");
+    } catch (err) {
+      setError(errorMessage(err, "No se pudo cargar el calendario."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDerive() {
+    if (!caseId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setDerived(await deriveCase(caseId));
+      setStep("params");
+    } catch (err) {
+      setError(errorMessage(err, "No se pudo preparar el caso."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSolve(params: SolveParams, warmStartFile: File | null) {
+    if (!derived) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (params.warm_start && warmStartFile) {
+        await uploadWarmStart(derived.derived_case_id, warmStartFile);
+      }
+      const accepted = await solveCase(derived.derived_case_id, params);
+      setJobId(accepted.job_id);
+      setStep("progress");
+    } catch (err) {
+      setError(errorMessage(err, "No se pudo iniciar la corrida."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const errorAlert = error && (
+    <Alert variant="destructive">
+      <AlertDescription>{error}</AlertDescription>
+    </Alert>
+  );
 
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10">
@@ -58,11 +129,11 @@ export function ModificacionPage() {
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">Modificación de calendario existente</h1>
           <p className="text-sm text-muted-foreground">
-            Cargá el calendario vigente y los datos base para ubicar un cambio puntual.
+            Cargá el calendario vigente y los datos base para ubicar cambios puntuales.
           </p>
         </header>
 
-        <ol className="flex items-center justify-center gap-2 text-xs font-medium text-muted-foreground">
+        <ol className="flex flex-wrap items-center justify-center gap-2 text-xs font-medium text-muted-foreground">
           {STEPS.map((s, index) => (
             <li key={s.kind} className="flex items-center gap-2">
               <span
@@ -84,89 +155,93 @@ export function ModificacionPage() {
         </ol>
 
         <Card>
-          {step.kind === "calendario" && (
+          {step === "calendario" && (
             <>
               <CardHeader>
                 <CardTitle>1. Calendario vigente</CardTitle>
               </CardHeader>
               <CardContent>
                 <CalendarioUpload
-                  onContinue={(calendario, calendarioFile) =>
-                    setStep({ kind: "datos", calendario, calendarioFile })
-                  }
+                  onContinue={(data, file) => {
+                    setCalendario({ data, file });
+                    goTo("datos");
+                  }}
                 />
               </CardContent>
             </>
           )}
 
-          {step.kind === "datos" && (
+          {step === "datos" && (
             <>
               <CardHeader>
                 <CardTitle>2. Datos del caso</CardTitle>
               </CardHeader>
-              <CardContent>
-                <FileUploadForm
-                  onCaseCreated={(caseId) =>
-                    setStep({
-                      kind: "cambio",
-                      calendario: step.calendario,
-                      calendarioFile: step.calendarioFile,
-                      caseId,
-                      changes: [],
-                    })
-                  }
-                />
+              <CardContent className="flex flex-col gap-4">
+                <FileUploadForm onCaseCreated={handleCaseCreated} />
+                {busy && <p className="text-sm text-muted-foreground">Validando el calendario…</p>}
+                {errorAlert}
               </CardContent>
             </>
           )}
 
-          {step.kind === "cambio" && (
+          {step === "cambio" && caseId && calendario && (
             <>
               <CardHeader>
                 <CardTitle>3. Cambios a realizar</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-col gap-4">
                 <CambiosStep
-                  caseId={step.caseId}
-                  codigosEnCalendario={calendarioCodigos(step.calendario)}
-                  changes={step.changes}
-                  onChange={(changes) => setStep({ ...step, changes })}
-                  onContinue={() => setStep({ ...step, kind: "guardado" })}
+                  caseId={caseId}
+                  codigosEnCalendario={calendarioCodigos(calendario.data)}
+                  changes={changes}
+                  onChange={setChanges}
+                  onContinue={handleDerive}
+                  continuing={busy}
                 />
+                {errorAlert}
               </CardContent>
             </>
           )}
 
-          {step.kind === "guardado" && (
+          {step === "params" && derived && (
             <>
               <CardHeader>
-                <CardTitle>3. Cambios guardados</CardTitle>
+                <CardTitle>4. Parámetros de la corrida</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <p className="text-sm" data-testid="cambios-guardados">
-                  {step.changes.length} {step.changes.length === 1 ? "cambio guardado" : "cambios guardados"}.
-                  Ubicarlos en el calendario es la próxima tarea.
+                <p className="text-sm text-muted-foreground" data-testid="resumen-derivado">
+                  {derived.fixed_ucs} evaluaciones quedan fijas; el modelo ubica {derived.free_ucs.length}{" "}
+                  {derived.free_ucs.length === 1 ? "UC" : "UCs"} ({derived.free_ucs.join(", ")}).
                 </p>
-                <ul className="flex flex-col gap-1 text-sm">
-                  {step.changes.map((change) => (
-                    <li key={change.codigo}>
-                      {change.tipo === "alta" ? "Alta" : "Modificación"}:{" "}
-                      <strong>
-                        {change.nombre ?? ""} ({change.codigo})
-                      </strong>
-                    </li>
-                  ))}
-                </ul>
-                <CalendarioTable calendario={step.calendario} />
-                <div className="mb-6 flex justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setStep({ ...step, kind: "cambio" })}
-                  >
-                    Editar cambios
-                  </Button>
-                </div>
+                {derived.warnings.map((warning) => (
+                  <Alert key={warning}>
+                    <AlertDescription>{warning}</AlertDescription>
+                  </Alert>
+                ))}
+                <ParamsForm submitting={busy} onSubmit={handleSolve} />
+                {errorAlert}
+              </CardContent>
+            </>
+          )}
+
+          {step === "progress" && jobId && (
+            <>
+              <CardHeader>
+                <CardTitle>5. Ejecutando el modelo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ProgressScreen jobId={jobId} onDone={() => goTo("result")} />
+              </CardContent>
+            </>
+          )}
+
+          {step === "result" && jobId && (
+            <>
+              <CardHeader>
+                <CardTitle>6. Resultado</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResultScreen jobId={jobId} onRestart={() => goTo("cambio")} />
               </CardContent>
             </>
           )}

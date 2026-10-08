@@ -13,12 +13,14 @@ interface CambiosStepProps {
   changes: UcChange[];
   onChange: (changes: UcChange[]) => void;
   onContinue: () => void;
+  // true mientras el padre prepara el paso siguiente (deshabilita Continuar).
+  continuing?: boolean;
 }
 
 // `index === null` es un alta de cambio nueva (se agrega al final de la lista).
 type Editing = { index: number | null };
 
-export function CambiosStep({ caseId, codigosEnCalendario, changes, onChange, onContinue }: CambiosStepProps) {
+export function CambiosStep({ caseId, codigosEnCalendario, changes, onChange, onContinue, continuing = false }: CambiosStepProps) {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
@@ -104,8 +106,8 @@ export function CambiosStep({ caseId, codigosEnCalendario, changes, onChange, on
       </div>
 
       <div className="mb-6 flex justify-end">
-        <Button type="button" disabled={changes.length === 0} onClick={onContinue}>
-          Continuar
+        <Button type="button" disabled={changes.length === 0 || continuing} onClick={onContinue}>
+          {continuing ? "Preparando..." : "Continuar"}
         </Button>
       </div>
 
