@@ -1,12 +1,18 @@
 import {
   REQUIRED_FILES,
   type CaseCreated,
+  type Catalog,
+  type ChangeIssue,
+  type CoincidenciaItem,
   type JobResultResponse,
   type JobStatusResponse,
   type RequiredFileName,
   type SchemaValidationError,
   type SolveAccepted,
   type SolveParams,
+  type Trayectoria,
+  type UcChange,
+  type UcDetail,
 } from "./types";
 
 export class ApiError extends Error {
@@ -25,6 +31,16 @@ export class SchemaValidationApiError extends ApiError {
   constructor(details: SchemaValidationError["details"]) {
     super("El caso tiene errores de esquema.", 422);
     this.name = "SchemaValidationApiError";
+    this.details = details;
+  }
+}
+
+export class ChangeValidationApiError extends ApiError {
+  details: ChangeIssue[];
+
+  constructor(details: ChangeIssue[]) {
+    super("El cambio tiene errores.", 422);
+    this.name = "ChangeValidationApiError";
     this.details = details;
   }
 }
@@ -108,4 +124,48 @@ export function jobDownloadUrl(jobId: string): string {
 
 export function jobWarmStartDownloadUrl(jobId: string): string {
   return `/api/jobs/${jobId}/warm-start-download`;
+}
+
+async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init);
+  if (!response.ok) {
+    throw new ApiError(await parseJsonError(response), response.status);
+  }
+  return response.json();
+}
+
+export function getCatalog(caseId: string): Promise<Catalog> {
+  return getJson(`/api/cases/${caseId}/catalog`);
+}
+
+export function getUcDetail(caseId: string, codigo: string): Promise<UcDetail> {
+  return getJson(`/api/cases/${caseId}/ucs/${encodeURIComponent(codigo)}`);
+}
+
+export function estimateCoincidencia(
+  caseId: string,
+  body: { codigo: string | null; inscriptos: number; trayectoria: Trayectoria[] },
+): Promise<CoincidenciaItem[]> {
+  return getJson(`/api/cases/${caseId}/estimate-coincidencia`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Reemplaza el conjunto completo de cambios del caso.
+export async function putChanges(caseId: string, changes: UcChange[]): Promise<UcChange[]> {
+  const response = await fetch(`/api/cases/${caseId}/changes`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ changes }),
+  });
+  if (response.ok) {
+    return (await response.json()).changes;
+  }
+  if (response.status === 422) {
+    const body = await response.json();
+    if (Array.isArray(body?.details)) throw new ChangeValidationApiError(body.details);
+  }
+  throw new ApiError(await parseJsonError(response), response.status);
 }
