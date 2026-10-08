@@ -69,3 +69,6 @@ class JobResultResponse(BaseModel):
     # `solver_jobs._TIMEOUT_MESSAGE_*`.
     message: Optional[str] = None
     error_message: Optional[str] = None
+    # Para "infeasible": explicación de la causa, una frase por problema (ver
+    # `services/feasibility.py`). Vacía si no se pudo determinar.
+    infeasibility_reasons: Optional[list[str]] = None

@@ -18,6 +18,7 @@ from typing import Optional
 
 from backend.app.core.config import STORAGE_DIR
 from backend.app.schemas.job import JobStatusName
+from backend.app.services import feasibility
 from backend.app.services.case_storage import warm_start_path
 from solve import solve_model
 
@@ -75,6 +76,8 @@ class Job:
     # Mensaje accionable para status == "timeout" (ver _classify_solution).
     message: Optional[str] = None
     result: Optional[dict] = None
+    # Para status == "infeasible": ver `feasibility.diagnose`.
+    infeasibility_reasons: list[str] = field(default_factory=list)
 
     def elapsed_seconds(self) -> Optional[float]:
         if self.started_at is None:
@@ -148,6 +151,12 @@ def _run_job(
     if new_status == "infeasible" or (new_status == "timeout" and value is None):
         # Infactible, o tiempo agotado sin encontrar ninguna solución entera:
         # no hay `result`/calendario que mostrar.
+        if new_status == "infeasible":
+            # Antes de exponer el status final, igual que `result` más abajo.
+            try:
+                job.infeasibility_reasons = feasibility.diagnose(case_dir)
+            except Exception:
+                job.infeasibility_reasons = []
         job.message = message
         job.status = new_status
         return

@@ -97,6 +97,8 @@ export interface JobResultResponse {
   // Mensaje accionable para status === "timeout" (con o sin `schedule`).
   message: string | null;
   error_message: string | null;
+  // Sólo para "infeasible": por qué (una frase por problema). Puede faltar o venir vacío.
+  infeasibility_reasons?: string[] | null;
 }
 
 // --- Tarea 2: edición incremental (alta/modificación de una UC) ---

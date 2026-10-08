@@ -15,13 +15,14 @@ de siempre— en el que:
 """
 
 import json
+import shutil
 import uuid
 from dataclasses import dataclass, field
 
 import pandas as pd
 
 from backend.app.schemas.change import UcChange
-from backend.app.services import uc_change
+from backend.app.services import feasibility, uc_change
 from backend.app.services.calendar_parser import (
     CalendarParseError,
     Placement,
@@ -186,6 +187,17 @@ def build_derived_case(case_id: str) -> DerivedCase:
     out.mkdir(parents=True)
     for name, df in files.items():
         df.to_csv(out / f"{name}.csv", index=False)
+
+    # Si lo que queda fijo ya se incumple entre sí, el modelo va a ser
+    # infactible hagan lo que hagan los cambios: se avisa ahora, sin correr
+    # (y esperar) un solve que no puede salir bien.
+    try:
+        report = feasibility.fixed_conflict_report(out)
+    except Exception:
+        report = []
+    if report:
+        shutil.rmtree(out)
+        raise DerivedCaseError("\n- ".join([report[0], *report[1:]]))
 
     return DerivedCase(
         case_id=derived_id,

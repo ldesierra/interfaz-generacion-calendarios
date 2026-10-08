@@ -116,7 +116,7 @@ export function ModificacionPage() {
 
   const errorAlert = error && (
     <Alert variant="destructive">
-      <AlertDescription>{error}</AlertDescription>
+      <AlertDescription className="whitespace-pre-line">{error}</AlertDescription>
     </Alert>
   );
 
@@ -241,7 +241,12 @@ export function ModificacionPage() {
                 <CardTitle>6. Resultado</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResultScreen jobId={jobId} onRestart={() => goTo("cambio")} />
+                <ResultScreen
+                  jobId={jobId}
+                  onRestart={() => goTo("cambio")}
+                  changes={changes}
+                  calendarioAnterior={calendario?.data ?? null}
+                />
               </CardContent>
             </>
           )}
