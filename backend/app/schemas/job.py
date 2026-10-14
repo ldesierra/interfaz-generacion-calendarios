@@ -1,0 +1,50 @@
+import re
+from datetime import datetime
+from typing import Literal, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+NOMBRE_CORRIDA_PATTERN = re.compile(r"^[\w\- ]+$")
+
+JobStatusName = Literal["pending", "running", "optimal", "infeasible", "error"]
+
+
+class SolveRequest(BaseModel):
+    alpha: float = Field(ge=0, le=1)
+    beta: float = Field(ge=0, le=1)
+    # Único solver soportado en el MVP (ver Supuestos y Riesgos del plan);
+    # se deja como campo explícito para no romper el contrato cuando se
+    # habilite Gurobi.
+    solver: Literal["PULP_CBC_CMD"] = "PULP_CBC_CMD"
+    time_limit_minutes: int = Field(gt=0, le=240)
+    nombre_corrida: str
+
+    @field_validator("nombre_corrida")
+    @classmethod
+    def _validar_nombre_corrida(cls, value: str) -> str:
+        nombre = value.strip()
+        if not nombre:
+            raise ValueError("el nombre de la corrida es obligatorio")
+        if len(nombre) > 60:
+            raise ValueError("el nombre de la corrida no puede superar los 60 caracteres")
+        if not NOMBRE_CORRIDA_PATTERN.match(nombre):
+            raise ValueError(
+                "el nombre de la corrida sólo puede tener letras, números, espacios, "
+                "guiones y guiones bajos"
+            )
+        return nombre
+
+
+class SolveAccepted(BaseModel):
+    job_id: str
+    case_id: str
+    status: JobStatusName
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    case_id: str
+    status: JobStatusName
+    started_at: Optional[datetime] = None
+    elapsed_seconds: Optional[float] = None
+    error_message: Optional[str] = None

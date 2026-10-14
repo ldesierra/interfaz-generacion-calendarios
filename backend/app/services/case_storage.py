@@ -5,9 +5,21 @@ MVP: filesystem local (`storage/cases/{case_id}/`). Ver la nota de
 externo si el filesystem efímero de Vercel no alcanza (subtarea 9).
 """
 
+import re
 from typing import IO
 
 from backend.app.core.config import STORAGE_DIR
+
+# case_id se genera en POST /api/cases como uuid.uuid4().hex. Validar el
+# formato antes de resolverlo contra el filesystem evita que un case_id
+# arbitrario del cliente (p.ej. "../../etc") se use para construir un path
+# fuera de STORAGE_DIR (usado por endpoints que sí reciben case_id del
+# cliente, como POST /api/cases/{case_id}/solve).
+_CASE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
+
+
+def is_valid_case_id(case_id: str) -> bool:
+    return bool(_CASE_ID_PATTERN.match(case_id))
 
 
 def case_dir(case_id: str):
