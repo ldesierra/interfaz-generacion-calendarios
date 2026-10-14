@@ -43,14 +43,46 @@ _TINY_CASE_FILES = {
 }
 
 
-@pytest.fixture
-def small_case(isolated_storage) -> str:
-    case_id = "a" * 32  # case_dir espera un uuid4().hex real, ver is_valid_case_id
+def _write_case(isolated_storage, case_id: str, files: dict[str, str]) -> str:
     case_dir = isolated_storage / case_id
     case_dir.mkdir(parents=True)
-    for name, content in _TINY_CASE_FILES.items():
+    for name, content in files.items():
         (case_dir / f"{name}.csv").write_text(content)
     return case_id
+
+
+@pytest.fixture
+def small_case(isolated_storage) -> str:
+    # case_dir espera un uuid4().hex real, ver is_valid_case_id.
+    return _write_case(isolated_storage, "a" * 32, _TINY_CASE_FILES)
+
+
+@pytest.fixture
+def infeasible_case(isolated_storage) -> str:
+    # Mismas UC/días/turnos que _TINY_CASE_FILES, pero las 3 UC quedan en el
+    # mismo semestre y carrera: UC_MISMO_SEMESTRE exige que cada par se
+    # asigne a días distintos, y con solo 2 días para 3 UC eso es imposible.
+    files = dict(_TINY_CASE_FILES)
+    files["trayectoria_sugerida"] = (
+        "unidad_curricular,semestre,carrera\nA,1,K1\nB,1,K1\nC,1,K1\n"
+    )
+    return _write_case(isolated_storage, "b" * 32, files)
+
+
+def _solve_and_wait(case_id: str, **overrides) -> dict:
+    response = client.post(f"/api/cases/{case_id}/solve", json=_solve_payload(**overrides))
+    job_id = response.json()["job_id"]
+
+    terminal_statuses = {"optimal", "infeasible", "error"}
+    deadline = time.monotonic() + 20
+    status_body = None
+    while time.monotonic() < deadline:
+        status_body = client.get(f"/api/jobs/{job_id}").json()
+        if status_body["status"] in terminal_statuses:
+            return status_body
+        time.sleep(0.2)
+
+    raise AssertionError(f"el job {job_id} no llegó a un estado terminal a tiempo: {status_body}")
 
 
 def _solve_payload(**overrides):
@@ -122,22 +154,91 @@ def test_solve_returns_202_and_job_can_be_polled(small_case):
 
 
 def test_solve_job_runs_in_background_and_reaches_a_terminal_status(small_case):
-    response = client.post(f"/api/cases/{small_case}/solve", json=_solve_payload())
-    job_id = response.json()["job_id"]
-
-    terminal_statuses = {"optimal", "infeasible", "error"}
-    deadline = time.monotonic() + 20
-    status_body = None
-    while time.monotonic() < deadline:
-        status_body = client.get(f"/api/jobs/{job_id}").json()
-        if status_body["status"] in terminal_statuses:
-            break
-        time.sleep(0.2)
-
-    assert status_body is not None
     # El caso sintético es trivialmente factible: si termina en otro estado
     # (infeasible/error) es un bug real, no falta de tiempo.
+    status_body = _solve_and_wait(small_case)
+
     assert status_body["status"] == "optimal", status_body
     assert status_body["elapsed_seconds"] is not None
     assert status_body["elapsed_seconds"] >= 0
     assert status_body["error_message"] is None
+
+
+def test_result_before_job_finishes_returns_409(small_case):
+    response = client.post(f"/api/cases/{small_case}/solve", json=_solve_payload())
+    job_id = response.json()["job_id"]
+
+    # Puede que el job (trivial) ya haya terminado; lo que importa acá es
+    # que la respuesta sea o bien 409 (todavía corriendo) o bien 200 (ya
+    # terminó) — nunca otra cosa.
+    result_response = client.get(f"/api/jobs/{job_id}/result")
+    assert result_response.status_code in (200, 409)
+
+
+def test_result_of_unknown_job_returns_404():
+    response = client.get("/api/jobs/no-existe/result")
+
+    assert response.status_code == 404
+
+
+def test_result_of_optimal_job_includes_schedule(small_case):
+    status_body = _solve_and_wait(small_case)
+    assert status_body["status"] == "optimal"
+
+    result = client.get(f"/api/jobs/{status_body['job_id']}/result")
+    assert result.status_code == 200
+    body = result.json()
+
+    assert body["status"] == "optimal"
+    assert isinstance(body["objective_value"], float)
+    assert body["execution_time_seconds"] >= 0
+    assert body["error_message"] is None
+
+    schedule = body["schedule"]
+    assert schedule["dias"] == [1, 2]
+    assert schedule["turnos"] == [1]
+    # Las 3 UC están asignadas exactamente una vez en total entre los dos días.
+    assignments = schedule["grilla"]["1"]["1"] + schedule["grilla"]["2"]["1"]
+    assert sorted(assignments) == ["UC A (A)", "UC B (B)", "UC C (C)"]
+
+
+def test_result_of_infeasible_job_has_no_schedule(infeasible_case):
+    status_body = _solve_and_wait(infeasible_case)
+    assert status_body["status"] == "infeasible"
+
+    result = client.get(f"/api/jobs/{status_body['job_id']}/result")
+    assert result.status_code == 200
+    body = result.json()
+
+    assert body["status"] == "infeasible"
+    assert body["schedule"] is None
+
+
+def test_download_of_optimal_job_returns_csv_attachment(small_case):
+    status_body = _solve_and_wait(small_case)
+    job_id = status_body["job_id"]
+
+    response = client.get(f"/api/jobs/{job_id}/download")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert 'attachment; filename="calendario_corrida-1.csv"' in response.headers[
+        "content-disposition"
+    ]
+    lines = response.text.strip().splitlines()
+    assert lines[0] == "Día/Turno,Turno 1"
+    assert len(lines) == 3  # encabezado + 2 días
+
+
+def test_download_of_infeasible_job_returns_409(infeasible_case):
+    status_body = _solve_and_wait(infeasible_case)
+
+    response = client.get(f"/api/jobs/{status_body['job_id']}/download")
+
+    assert response.status_code == 409
+
+
+def test_download_of_unknown_job_returns_404():
+    response = client.get("/api/jobs/no-existe/download")
+
+    assert response.status_code == 404
