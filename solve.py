@@ -9,10 +9,19 @@ from constants import Solver, MINUTES
 
 
 def solve_model(
-    dir_name: str, solver_name: Solver, alpha: float, beta: float, time_limit_minutes=15
-) -> tuple[float, float, str, dict]:
+    source, solver_name: Solver, alpha: float, beta: float, time_limit_minutes=15
+) -> tuple[float, float, str, list, dict]:
+    """
+    Args:
+        source: path a un directorio con los CSV del caso, o un dict
+            {nombre_csv: archivo} con archivos subidos (ver
+            csv_data_to_model_data.load_calendar_data).
+
+    Returns:
+        (valor_objetivo, tiempo_ejecucion_seg, status, variables, uc_descriptions)
+    """
     # region CARGA DE DATOS
-    datos = load_calendar_data(dir_name)
+    datos = load_calendar_data(source)
 
     D = datos.get("D")
     C = datos.get("C")
@@ -217,5 +226,6 @@ def solve_model(
         execution_time,
         pl.LpStatus[problem.status],
         problem.variables(),
+        datos.get("uc_descriptions"),
     )
     # endregion
