@@ -1,0 +1,31 @@
+.progress-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 0;
+}
+
+.progress-screen--error {
+  color: #c0392b;
+}
+
+.progress-screen__elapsed {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.progress-screen__spinner {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 3px solid var(--border, #e5e4e7);
+  border-top-color: var(--accent, #aa3bff);
+  animation: progress-screen-spin 0.8s linear infinite;
+}
+
+@keyframes progress-screen-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

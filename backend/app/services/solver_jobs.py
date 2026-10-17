@@ -86,15 +86,21 @@ def _run_job(job: Job, alpha: float, beta: float, time_limit_minutes: int) -> No
         return
 
     job.finished_at = datetime.now(timezone.utc)
-    job.status = _SOLVE_STATUS_TO_JOB_STATUS.get(status, "error")
+    new_status = _SOLVE_STATUS_TO_JOB_STATUS.get(status, "error")
 
-    if job.status == "error":
+    if new_status == "error":
         job.error_message = f"El solver terminó con un estado inesperado: {status}"
+        job.status = new_status
         return
 
+    # `result` se completa antes de exponer el status final: un lector que
+    # vea `status` en "optimal"/"infeasible" (p.ej. GET /jobs/{id}/result,
+    # justo después de que el polling de status vea el mismo cambio) tiene
+    # que encontrar siempre `result` ya armado, nunca `None` a mitad de camino.
     job.result = {
         "objective_value": value,
         "execution_time_seconds": execution_time,
         "variables": variables,
         "uc_descriptions": uc_descriptions,
     }
+    job.status = new_status
