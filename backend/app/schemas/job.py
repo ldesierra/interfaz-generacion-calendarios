@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 NOMBRE_CORRIDA_PATTERN = re.compile(r"^[\w\- ]+$")
 
-JobStatusName = Literal["pending", "running", "optimal", "infeasible", "error"]
+JobStatusName = Literal["pending", "running", "optimal", "infeasible", "timeout", "error"]
 
 
 class SolveRequest(BaseModel):
@@ -63,4 +63,11 @@ class JobResultResponse(BaseModel):
     objective_value: Optional[float] = None
     execution_time_seconds: Optional[float] = None
     schedule: Optional[ScheduleGrid] = None
+    # true si `schedule` fue probado óptimo; false si viene de un
+    # "timeout" con solución factible encontrada (ver solver_jobs.py);
+    # None si no hay `schedule` (infeasible/error/timeout sin solución).
+    proven_optimal: Optional[bool] = None
+    # Mensaje accionable para "timeout" (con o sin `schedule`) — ver
+    # `solver_jobs._TIMEOUT_MESSAGE_*`.
+    message: Optional[str] = None
     error_message: Optional[str] = None

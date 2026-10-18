@@ -4,7 +4,7 @@ import type { JobStatusResponse } from "../../api/types";
 import "./ProgressScreen.css";
 
 const POLL_INTERVAL_MS = 1500;
-const TERMINAL_STATUSES = new Set(["optimal", "infeasible", "error"]);
+const TERMINAL_STATUSES = new Set(["optimal", "infeasible", "timeout", "error"]);
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "En cola...",

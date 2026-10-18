@@ -67,11 +67,20 @@ async def get_job_result(job_id: str):
             error_message=job.error_message,
         )
 
-    execution_time_seconds = job.result["execution_time_seconds"] if job.result else None
-
     if job.status == "infeasible":
-        return JobResultResponse(status="infeasible", execution_time_seconds=execution_time_seconds)
+        return JobResultResponse(
+            status="infeasible", execution_time_seconds=job.elapsed_seconds()
+        )
 
+    if job.status == "timeout" and job.result is None:
+        return JobResultResponse(
+            status="timeout",
+            execution_time_seconds=job.elapsed_seconds(),
+            message=job.message,
+        )
+
+    # "optimal", o "timeout" con una solución factible encontrada.
+    execution_time_seconds = job.result["execution_time_seconds"]
     max_day, max_turn, schedule = build_schedule_grid(
         job.result["variables"], job.result["uc_descriptions"]
     )
@@ -81,7 +90,7 @@ async def get_job_result(job_id: str):
     }
 
     return JobResultResponse(
-        status="optimal",
+        status=job.status,
         objective_value=job.result["objective_value"],
         execution_time_seconds=execution_time_seconds,
         schedule=ScheduleGrid(
@@ -89,6 +98,8 @@ async def get_job_result(job_id: str):
             turnos=list(range(1, max_turn + 1)),
             grilla=grilla,
         ),
+        proven_optimal=job.status == "optimal",
+        message=job.message,
     )
 
 
@@ -98,7 +109,7 @@ async def download_job_result(job_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail="el job no existe")
 
-    if job.status != "optimal" or job.result is None:
+    if job.result is None:
         raise HTTPException(
             status_code=409, detail="el job no tiene un calendario para descargar"
         )

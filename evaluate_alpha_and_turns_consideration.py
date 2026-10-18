@@ -37,11 +37,11 @@ if __name__ == "__main__":
         print(f"Ejecutando para alpha: {alpha}, beta: {beta}")
         print(f"{'='*80}")
 
-        value, time, status, variables, uc_descriptions = solve_model(
+        value, time, status, variables, uc_descriptions, solution_status = solve_model(
             case, solver, alpha, beta, 60
         )
 
-        print(f"Status {status}, valor {value}, tiempo {time:.2f} segundos")
+        print(f"Status {status} ({solution_status}), valor {value}, tiempo {time:.2f} segundos")
 
         if status != "Optimal":
             with open(results_file, "a") as f:

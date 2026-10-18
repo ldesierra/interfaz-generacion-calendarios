@@ -61,7 +61,13 @@ export interface SolveAccepted {
   status: JobStatusName;
 }
 
-export type JobStatusName = "pending" | "running" | "optimal" | "infeasible" | "error";
+export type JobStatusName =
+  | "pending"
+  | "running"
+  | "optimal"
+  | "infeasible"
+  | "timeout"
+  | "error";
 
 export interface JobStatusResponse {
   job_id: string;
@@ -84,5 +90,10 @@ export interface JobResultResponse {
   objective_value: number | null;
   execution_time_seconds: number | null;
   schedule: ScheduleGrid | null;
+  // true si `schedule` fue probado óptimo; false si viene de un "timeout"
+  // con solución factible; null si no hay `schedule`.
+  proven_optimal: boolean | null;
+  // Mensaje accionable para status === "timeout" (con o sin `schedule`).
+  message: string | null;
   error_message: string | null;
 }
