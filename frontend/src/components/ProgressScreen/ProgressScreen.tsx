@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { ApiError, getJobStatus } from "../../api/client";
 import type { JobStatusResponse } from "../../api/types";
-import "./ProgressScreen.css";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
 
 const POLL_INTERVAL_MS = 1500;
 const TERMINAL_STATUSES = new Set(["optimal", "infeasible", "timeout", "error"]);
@@ -64,11 +66,13 @@ export function ProgressScreen({ jobId, onDone }: ProgressScreenProps) {
 
   if (pollError) {
     return (
-      <div className="progress-screen progress-screen--error">
-        <p role="alert">{pollError}</p>
-        <button type="button" onClick={() => setAttempt((n) => n + 1)}>
+      <div className="flex flex-col items-center gap-4 py-6">
+        <Alert variant="destructive">
+          <AlertDescription>{pollError}</AlertDescription>
+        </Alert>
+        <Button type="button" variant="outline" onClick={() => setAttempt((n) => n + 1)}>
           Reintentar
-        </button>
+        </Button>
       </div>
     );
   }
@@ -76,11 +80,13 @@ export function ProgressScreen({ jobId, onDone }: ProgressScreenProps) {
   const label = status ? STATUS_LABELS[status.status] ?? status.status : "Iniciando...";
 
   return (
-    <div className="progress-screen">
-      <div className="progress-screen__spinner" aria-hidden="true" />
-      <p>{label}</p>
+    <div className="flex flex-col items-center gap-3 py-10 text-center">
+      <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
+      <p className="text-sm font-medium">{label}</p>
       {status?.elapsed_seconds != null && (
-        <p className="progress-screen__elapsed">Tiempo transcurrido: {formatElapsed(status.elapsed_seconds)}</p>
+        <p className="text-xs text-muted-foreground">
+          Tiempo transcurrido: {formatElapsed(status.elapsed_seconds)}
+        </p>
       )}
     </div>
   );

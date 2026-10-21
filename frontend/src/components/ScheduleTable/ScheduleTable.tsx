@@ -1,5 +1,5 @@
 import type { ScheduleGrid } from "../../api/types";
-import "./ScheduleTable.css";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 
 interface ScheduleTableProps {
   schedule: ScheduleGrid;
@@ -7,40 +7,40 @@ interface ScheduleTableProps {
 
 export function ScheduleTable({ schedule }: ScheduleTableProps) {
   return (
-    <table className="schedule-table">
-      <thead>
-        <tr>
-          <th scope="col">Día / Turno</th>
-          {schedule.turnos.map((turno) => (
-            <th scope="col" key={turno}>
-              Turno {turno}
-            </th>
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Día / Turno</TableHead>
+            {schedule.turnos.map((turno) => (
+              <TableHead key={turno}>Turno {turno}</TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {schedule.dias.map((dia) => (
+            <TableRow key={dia}>
+              <TableHead scope="row">Día {dia}</TableHead>
+              {schedule.turnos.map((turno) => {
+                const evaluaciones = schedule.grilla[String(dia)]?.[String(turno)] ?? [];
+                return (
+                  <TableCell key={turno}>
+                    {evaluaciones.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <ul className="flex flex-col gap-0.5">
+                        {evaluaciones.map((uc) => (
+                          <li key={uc}>{uc}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {schedule.dias.map((dia) => (
-          <tr key={dia}>
-            <th scope="row">Día {dia}</th>
-            {schedule.turnos.map((turno) => {
-              const evaluaciones = schedule.grilla[String(dia)]?.[String(turno)] ?? [];
-              return (
-                <td key={turno}>
-                  {evaluaciones.length === 0 ? (
-                    <span className="schedule-table__empty">—</span>
-                  ) : (
-                    <ul>
-                      {evaluaciones.map((uc) => (
-                        <li key={uc}>{uc}</li>
-                      ))}
-                    </ul>
-                  )}
-                </td>
-              );
-            })}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+        </TableBody>
+      </Table>
+    </div>
   );
 }

@@ -8,7 +8,10 @@ import {
   type TimeLimitMinutes,
   type Weight,
 } from "../../api/types";
-import "./ParamsForm.css";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Select } from "../ui/select";
 
 const NOMBRE_CORRIDA_PATTERN = /^[\w\- ]+$/;
 
@@ -58,10 +61,10 @@ export function ParamsForm({ onSubmit, submitting = false, initialValues }: Para
   }
 
   return (
-    <form className="params-form" onSubmit={handleSubmit} noValidate>
-      <div className="params-form__field">
-        <label htmlFor="nombre_corrida">Nombre del caso</label>
-        <input
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="nombre_corrida">Nombre del caso</Label>
+        <Input
           id="nombre_corrida"
           type="text"
           value={values.nombre_corrida}
@@ -75,87 +78,87 @@ export function ParamsForm({ onSubmit, submitting = false, initialValues }: Para
           aria-describedby={nombreError ? "nombre_corrida-error" : undefined}
         />
         {nombreError && (
-          <p id="nombre_corrida-error" className="params-form__error" role="alert">
+          <p id="nombre_corrida-error" className="text-xs text-destructive" role="alert">
             {nombreError}
           </p>
         )}
       </div>
 
-      <div className="params-form__field">
-        <label htmlFor="alpha">Alpha (peso de distancia entre semestres)</label>
-        <select
-          id="alpha"
-          value={values.alpha}
-          onChange={(event) =>
-            setValues((prev) => ({ ...prev, alpha: Number(event.target.value) as Weight }))
-          }
-        >
-          {WEIGHT_OPTIONS.map((weight) => (
-            <option key={weight} value={weight}>
-              {weight}
-            </option>
-          ))}
-        </select>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="alpha">Alpha (peso de distancia entre semestres)</Label>
+          <Select
+            id="alpha"
+            value={values.alpha}
+            onChange={(event) =>
+              setValues((prev) => ({ ...prev, alpha: Number(event.target.value) as Weight }))
+            }
+          >
+            {WEIGHT_OPTIONS.map((weight) => (
+              <option key={weight} value={weight}>
+                {weight}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="beta">Beta (peso de distancia entre previas)</Label>
+          <Select
+            id="beta"
+            value={values.beta}
+            onChange={(event) =>
+              setValues((prev) => ({ ...prev, beta: Number(event.target.value) as Weight }))
+            }
+          >
+            {WEIGHT_OPTIONS.map((weight) => (
+              <option key={weight} value={weight}>
+                {weight}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="time_limit_minutes">Tiempo límite</Label>
+          <Select
+            id="time_limit_minutes"
+            value={values.time_limit_minutes}
+            onChange={(event) =>
+              setValues((prev) => ({
+                ...prev,
+                time_limit_minutes: Number(event.target.value) as TimeLimitMinutes,
+              }))
+            }
+          >
+            {TIME_LIMIT_OPTIONS.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {minutes} min
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="solver">Solver</Label>
+          <Select
+            id="solver"
+            value={values.solver}
+            disabled={SOLVERS.length === 1}
+            onChange={(event) => setValues((prev) => ({ ...prev, solver: event.target.value as Solver }))}
+          >
+            {SOLVERS.map((solver) => (
+              <option key={solver} value={solver}>
+                {solver}
+              </option>
+            ))}
+          </Select>
+        </div>
       </div>
 
-      <div className="params-form__field">
-        <label htmlFor="beta">Beta (peso de distancia entre previas)</label>
-        <select
-          id="beta"
-          value={values.beta}
-          onChange={(event) =>
-            setValues((prev) => ({ ...prev, beta: Number(event.target.value) as Weight }))
-          }
-        >
-          {WEIGHT_OPTIONS.map((weight) => (
-            <option key={weight} value={weight}>
-              {weight}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="params-form__field">
-        <label htmlFor="time_limit_minutes">Tiempo límite</label>
-        <select
-          id="time_limit_minutes"
-          value={values.time_limit_minutes}
-          onChange={(event) =>
-            setValues((prev) => ({
-              ...prev,
-              time_limit_minutes: Number(event.target.value) as TimeLimitMinutes,
-            }))
-          }
-        >
-          {TIME_LIMIT_OPTIONS.map((minutes) => (
-            <option key={minutes} value={minutes}>
-              {minutes} min
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="params-form__field">
-        <label htmlFor="solver">Solver</label>
-        <select
-          id="solver"
-          value={values.solver}
-          disabled={SOLVERS.length === 1}
-          onChange={(event) =>
-            setValues((prev) => ({ ...prev, solver: event.target.value as Solver }))
-          }
-        >
-          {SOLVERS.map((solver) => (
-            <option key={solver} value={solver}>
-              {solver}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <button type="submit" disabled={submitting}>
+      <Button type="submit" disabled={submitting} className="self-end">
         {submitting ? "Ejecutando..." : "Ejecutar modelo"}
-      </button>
+      </Button>
     </form>
   );
 }

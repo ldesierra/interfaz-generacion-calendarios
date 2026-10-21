@@ -1,7 +1,11 @@
 import { useId, useState, type ChangeEvent, type FormEvent } from "react";
+import { CheckCircle2, Circle, UploadCloud } from "lucide-react";
 import { createCase, SchemaValidationApiError } from "../../api/client";
 import { REQUIRED_FILES, type RequiredFileName } from "../../api/types";
-import "./FileUploadForm.css";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
+import { Label } from "../ui/label";
+import { cn } from "../../lib/utils";
 
 const LABELS: Record<RequiredFileName, string> = {
   dias: "Días",
@@ -91,22 +95,28 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
   }
 
   return (
-    <form className="file-upload-form" onSubmit={handleSubmit} noValidate>
-      <div className="file-upload-form__bulk">
-        <label htmlFor={bulkInputId}>
-          Seleccioná los 14 CSV del caso (podés elegirlos todos juntos: deben llamarse{" "}
-          <code>dias.csv</code>, <code>unidades_curriculares.csv</code>, etc.)
-        </label>
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+      <div className="flex flex-col gap-2 rounded-lg border border-dashed border-input bg-muted/30 p-4">
+        <Label htmlFor={bulkInputId} className="flex items-start gap-2 font-normal text-foreground">
+          <UploadCloud className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <span>
+            Seleccioná los 14 CSV del caso (podés elegirlos todos juntos: deben llamarse{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">dias.csv</code>,{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">unidades_curriculares.csv</code>,
+            etc.)
+          </span>
+        </Label>
         <input
           id={bulkInputId}
           type="file"
           accept=".csv"
           multiple
           onChange={handleBulkChange}
+          className="text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-primary-foreground hover:file:bg-primary/90"
         />
       </div>
 
-      <ul className="file-upload-form__checklist">
+      <ul className="flex flex-col gap-1.5">
         {REQUIRED_FILES.map((name) => {
           const file = files[name];
           const error = fieldErrors[name];
@@ -114,16 +124,22 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
           return (
             <li
               key={name}
-              className={
-                "file-upload-form__item" +
-                (error ? " file-upload-form__item--error" : file ? " file-upload-form__item--ok" : "")
-              }
+              className={cn(
+                "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm",
+                error ? "border-destructive/40 bg-destructive/5" : "border-border",
+              )}
             >
-              <span className="file-upload-form__status" aria-hidden="true">
-                {file ? "✓" : "○"}
-              </span>
-              <label htmlFor={inputId}>{LABELS[name]}</label>
-              <span className="file-upload-form__filename">
+              {error ? (
+                <Circle className="size-4 shrink-0 text-destructive" aria-hidden="true" />
+              ) : file ? (
+                <CheckCircle2 className="size-4 shrink-0 text-success" aria-hidden="true" />
+              ) : (
+                <Circle className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              )}
+              <Label htmlFor={inputId} className="w-44 shrink-0 font-normal">
+                {LABELS[name]}
+              </Label>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
                 {file ? file.name : "sin archivo"}
               </span>
               <input
@@ -131,9 +147,10 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
                 type="file"
                 accept=".csv"
                 onChange={(event) => handleSingleChange(name, event)}
+                className="w-40 text-xs text-muted-foreground file:mr-2 file:rounded-md file:border file:border-input file:bg-background file:px-2 file:py-1 file:text-xs"
               />
               {error && (
-                <p className="file-upload-form__error" role="alert">
+                <p className="w-full text-xs text-destructive" role="alert">
                   {error}
                 </p>
               )}
@@ -143,14 +160,14 @@ export function FileUploadForm({ onCaseCreated }: FileUploadFormProps) {
       </ul>
 
       {submitError && (
-        <p className="file-upload-form__error" role="alert">
-          {submitError}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{submitError}</AlertDescription>
+        </Alert>
       )}
 
-      <button type="submit" disabled={!allFilesPresent || submitting}>
+      <Button type="submit" disabled={!allFilesPresent || submitting} className="self-end">
         {submitting ? "Subiendo..." : "Continuar"}
-      </button>
+      </Button>
     </form>
   );
 }
