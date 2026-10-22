@@ -131,16 +131,21 @@ def load_calendar_data(source):
             and str(row["uc"]) != str(row["uc_requerida"])
         ]
 
-        # Pares frecuentes
+        # Pares frecuentes (se filtran más abajo, una vez calculados co y dist_sem,
+        # para descartar pares sin coincidencia de estudiantes, sin relación
+        # curricular y sin vínculo de previatura)
         PARES_UC = list(combinations(C, 2))
 
-        # Unidades curriculares del mismo semestre
-        UC_MISMO_SEMESTRE = {
-            (c1, c2): True
-            for (c1, s1, k1) in SUG
-            for (c2, s2, k2) in SUG
-            if c1 != c2 and s1 == s2 and k1 == k2
-        }
+        # Grupos de unidades curriculares sugeridas para el mismo semestre y
+        # carrera. Se agrupan (en lugar de listar pares) para poder imponer
+        # una única restricción "a lo sumo una por día" por grupo, que es más
+        # fuerte (mejor relajación LP) que la versión por pares.
+        GRUPOS_MISMO_SEMESTRE = {}
+        for c, s, k in SUG:
+            GRUPOS_MISMO_SEMESTRE.setdefault((s, k), set()).add(c)
+        GRUPOS_MISMO_SEMESTRE = [
+            sorted(ucs) for ucs in GRUPOS_MISMO_SEMESTRE.values() if len(ucs) > 1
+        ]
 
         # ==== PARÁMETROS ====
 
@@ -194,6 +199,22 @@ def load_calendar_data(source):
         dist_sem = {(c1, c2): get_dist_sem(c1, c2) for c1, c2 in PARES_UC}
         dist_sem.update({(c2, c1): v for (c1, c2), v in dist_sem.items()})
 
+        # Filtrar PARES_UC: descartar pares sin coincidencia de estudiantes,
+        # sin relación curricular (dist_sem == len(S) equivale a "sin carreras
+        # en común") y que no sean un par de previaturas. Estos pares no
+        # aportan información al objetivo (su único término es una constante
+        # despreciable) pero cada uno agrega |DS| variables binarias w más
+        # z, z_plus, z_minus, y, por lo que filtrarlos reduce fuertemente el
+        # tamaño del MIP sin cambiar el valor óptimo del modelo.
+        pares_previas = {frozenset((c1, c2)) for c1, c2 in P}
+        PARES_UC = [
+            (c1, c2)
+            for c1, c2 in PARES_UC
+            if co[(c1, c2)] > 0
+            or dist_sem[(c1, c2)] < len(S)
+            or frozenset((c1, c2)) in pares_previas
+        ]
+
         # Determinar el máximo número de turnos
         max_turns = max(len(Td[d]) for d in D)
 
@@ -237,7 +258,7 @@ def load_calendar_data(source):
             "P": P,
             "COP": COP,
             "PARES_UC": PARES_UC,
-            "UC_MISMO_SEMESTRE": UC_MISMO_SEMESTRE,
+            "GRUPOS_MISMO_SEMESTRE": GRUPOS_MISMO_SEMESTRE,
             "DS": DS,
             "uc_descriptions": uc_descriptions,
             # Parámetros

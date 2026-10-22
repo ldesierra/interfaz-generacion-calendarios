@@ -16,6 +16,8 @@ seaborn = "^0.13.2"
 fastapi = "^0.115.0"
 uvicorn = "^0.34.0"
 python-multipart = "^0.0.20"
+gurobipy = "^13.0.3"
+python-dotenv = "^1.2.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"

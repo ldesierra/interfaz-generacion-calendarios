@@ -10,15 +10,21 @@ if __name__ == "__main__":
 
     print("Status:", status, "-", solution_status)
 
+    if value is None:
+        raise Exception(f"No se encontró ninguna solución factible. Status: {status}")
+
     if status != "Optimal":
-        raise Exception(f"El problema no tiene solución óptima. Status: {status}")
+        print(f"Aviso: no se probó optimalidad (status: {status}), se muestra la mejor solución factible encontrada.")
 
+    # Variables x_<uc>_<dia>_<turno> asignadas (valen 1) en la mejor solución encontrada.
     for v in variables:
-        print(v.name, "=", v.varValue)
+        if v.name.startswith("x_") and v.varValue == 1.0:
+            print(v.name, "=", v.varValue)
 
-    print(f"Valor óptimo de la función objetivo: {value}")
+    print(f"Valor de la función objetivo: {value}")
 
     print(f"Tiempo de ejecución: {time:.2f} segundos")
     print(f"                     {time/60:.2f} minutos")
 
     generate_schedule_csv(variables, uc_descriptions, "schedule_1s1p_corregido.csv")
+    print("Calendario escrito en schedule_1s1p_corregido.csv")
