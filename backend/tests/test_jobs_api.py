@@ -143,6 +143,28 @@ def test_solve_accepts_gurobi_solver_and_passes_it_through(small_case, monkeypat
     assert captured_solver["value"] == "GUROBI_CMD"
 
 
+def test_solve_accepts_highs_solver_and_passes_it_through(small_case, monkeypatch):
+    from backend.app.services import solver_jobs
+
+    captured_solver = {}
+
+    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None):
+        captured_solver["value"] = solver_name
+        return (1.0, 0.01, "Optimal", [], {}, "Optimal Solution Found")
+
+    monkeypatch.setattr(solver_jobs, "solve_model", _fake_solve_model)
+
+    response = client.post(
+        f"/api/cases/{small_case}/solve", json=_solve_payload(solver="HiGHS")
+    )
+    assert response.status_code == 202
+
+    _wait_for_status(
+        response.json()["job_id"], {"optimal", "timeout", "infeasible", "error"}
+    )
+    assert captured_solver["value"] == "HiGHS"
+
+
 def test_solve_rejects_empty_nombre_corrida(small_case):
     response = client.post(
         f"/api/cases/{small_case}/solve", json=_solve_payload(nombre_corrida="   ")

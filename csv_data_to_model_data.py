@@ -104,8 +104,14 @@ def load_calendar_data(source):
 
         # Sugerencias de UCs
         sug_df = load_csv("trayectoria_sugerida")
+        # El codigo de UC se normaliza a str: pandas infiere int64 para esta
+        # columna cuando todos los codigos del CSV son numericos (p.ej.
+        # caso_md), mientras que C siempre viene como str desde
+        # unidades_curriculares.csv. Sin el str() el filtro de abajo pasa
+        # (compara str contra C) pero la tupla guarda el int, y despues ni
+        # get_dist_sem ni GRUPOS_MISMO_SEMESTRE logran machear contra C.
         SUG = [
-            (row["unidad_curricular"], row["semestre"], row["carrera"])
+            (str(row["unidad_curricular"]), row["semestre"], row["carrera"])
             for _, row in sug_df.iterrows()
             if str(row["unidad_curricular"]) in C  # Solo incluir si la UC existe en C
         ]

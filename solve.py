@@ -337,6 +337,11 @@ def solve_model(
             )
         case Solver.CPLEX_CMD:
             solver = pl.CPLEX_CMD(msg=1, threads=cpu_cores, timeLimit=time_limit)
+        case Solver.HIGHS:
+            # HiGHS (open source) via highspy, que ya viene como dependencia de
+            # PuLP. Es bastante mas fuerte que CBC en este modelo y no necesita
+            # licencia, asi que es la alternativa libre a Gurobi.
+            solver = pl.HiGHS(msg=1, threads=cpu_cores, timeLimit=time_limit)
         case Solver.PULP_CBC_CMD:
             solver = pl.PULP_CBC_CMD(msg=1, threads=cpu_cores, timeLimit=time_limit)
         case _:

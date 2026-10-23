@@ -5,6 +5,7 @@ MINUTES = 60
 class Solver:
     CPLEX_CMD = "CPLEX_CMD"
     GUROBI_CMD = "GUROBI_CMD"
+    HIGHS = "HiGHS"
     PULP_CBC_CMD = "PULP_CBC_CMD"
 
 
