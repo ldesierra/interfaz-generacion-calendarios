@@ -85,6 +85,21 @@ def _load_sol_file(path):
     return values
 
 
+def _hay_asignacion(x_vars) -> bool:
+    """¿Las variables x codifican una asignación, o el solver cortó sin nada?
+
+    Cuando el solver termina sin ninguna solución entera, no todos devuelven
+    lo mismo: Gurobi deja las variables en None, pero HiGHS y CBC las dejan
+    todas en 0. En ese segundo caso `pl.value(objetivo)` da 0.0 en vez de
+    None, que es un valor objetivo perfectamente plausible, y quien llame a
+    solve_model no tiene cómo distinguirlo de un calendario de costo cero.
+    La señal confiable es si alguna x quedó en 1: AsignacionUnica obliga a que
+    haya exactamente una por UC, así que una solución real nunca las tiene
+    todas en 0.
+    """
+    return any(var.varValue is not None and var.varValue > 0.5 for var in x_vars)
+
+
 def solve_model(
     source,
     solver_name: Solver,
@@ -112,6 +127,11 @@ def solve_model(
 
     Returns:
         (valor_objetivo, tiempo_ejecucion_seg, status, variables, uc_descriptions, solution_status)
+
+        `valor_objetivo` es None si el solver terminó sin ninguna solución
+        entera, sin importar qué haya devuelto cada solver para las variables
+        (ver `_hay_asignacion`). Quien llame puede usar `valor_objetivo is
+        None` como "no hay calendario".
 
         `status` (`pl.LpStatus`) y `solution_status` (`pl.LpSolution`) hay
         que mirarlos juntos: CBC, al llegar al `time_limit_minutes` con una
@@ -359,8 +379,12 @@ def solve_model(
 
     execution_time = end_time - start_time
 
+    objective_value = (
+        pl.value(problem.objective) if _hay_asignacion(x.values()) else None
+    )
+
     return (
-        pl.value(problem.objective),
+        objective_value,
         execution_time,
         pl.LpStatus[problem.status],
         problem.variables(),
