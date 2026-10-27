@@ -1,14 +1,14 @@
 Día/Turno,Turno 1,Turno 2,Turno 3
-Día 1,Geometria y Algebra lineal 2 (1031) & Intro a la ciencia de materiales (1723) & Administración de Operaciones (1915) & Intro. A la Mecánica de Suelos (2207) & Intro al control Industrial (2707) & Ingenieria de reacciones quimicas 1 (Q69),Geometria y Algebra lineal 1 (1030) & Metalurgia de transformación (1724) & Calidad de aguas (1854) & Subestaciones de Media Tensión (5514) & Antenas y Propagación (5817) & Tecnologías de redes y servicios de telecomunicaciones (5866),
+Día 1,Geometria y Algebra lineal 1 (1030) & Materiales y ensayos (1508) & Metalurgia de transformación (1724) & Máquinas para fluidos 1 (1856) & Administración de Operaciones (1915) & Redes de datos 2 (5855),Probabilidad y Estadistica (1025) & Medidas eléctricas (1461) & Intro. Invest. De Operaciones (1650) & Intro. A la Mecánica de Suelos (2207) & Ingenieria de reacciones quimicas 1 (Q69) & Ingenieria bioquimica (Q81),
 Día 2,,,
-Día 3,Programación 2 (1321) & Materiales y ensayos (1508) & Máquinas para fluidos 1 (1856) & Electrotécnica (5850) & Termodinámica aplicada (Q21) & Ingenieria bioquimica (Q81),Programación 1 (1373) & Principios de Química General (1620) & Elementos de máquinas (1720) & Estructuras de Acero (2393) & Electrónica Avanzada 2 (5717) & Tratamiento biológico de Efluentes (Q56),
-Día 4,Intro. Invest. De Operaciones (1650) & Mecánica Estructural (2381),,Transferencia de calor y masa 2 (Q74)
+Día 3,Programación 1 (1373) & Elementos de máquinas (1720) & Termodinámica aplicada (Q21) & Tratamiento biológico de Efluentes (Q56),Programación 2 (1321) & Principios de Química General (1620) & Administracion general para ingenieros (1944),
+Día 4,Fisica 2 (1152),Intro a la ciencia de materiales (1723),Subestaciones de Media Tensión (5514)
 Día 5,,,
-Día 6,Administracion general para ingenieros (1944),Probabilidad y Estadistica (1025),
-Día 7,Electrónica de potencia (5609),Electrotécnica 1 (2108),Calculo dif. integral en varias variables (1062) & Funciones de Variable Compleja (1066)
-Día 8,Calculo Dif. Integral en una variable (1061),Calculo Vectorial (1063) & Sistemas Operativos (1537),
+Día 6,Geometria y Algebra lineal 2 (1031) & Elementos de Mecánica de los fluidos (1805) & Electrónica Avanzada 2 (5717),,Tecnologías de redes y servicios de telecomunicaciones (5866) & Tecnologia y servicios industriales 1 (Q71)
+Día 7,Intro al control Industrial (2707),,Mecánica Estructural (2381)
+Día 8,Calculo dif. integral en varias variables (1062) & Funciones de Variable Compleja (1066) & Mecánica Newtoniana (1122),Calculo Dif. Integral en una variable (1061) & Sistemas Operativos (1537),
 Día 9,,,
-Día 10,Elasticidad (2366) & Diseño de procesos químicos (Q196),,Logica (1027) & Fisica 3 (1153)
-Día 11,Matemática Discreta 1 (1023) & Energía 1 (1850),Teoría de Lenguajes (1325),Tecnología del Hormigón (2371)
-Día 12,Imágenes médicas (5707) & Fenomenos de transporte en ingenieria de procesos (Q22),Instrumentación Industrial (2706) & Redes eléctricas (5508),Matemática Discreta 2 (1026) & Comp Mec de Materiales 1 (1764)
-Día 13,Fisica 1 (1151) & Patologia de las estructuras (2389) & Energía 2 (2394),Fisica 2 (1152) & Medidas eléctricas (1461) & Gestión de Calidad (1954) & Hormigón 1 (2382) & Redes de datos 2 (5855) & Dinámica y Control de Procesos (Q94),Mecánica Newtoniana (1122) & Señales y Sistemas (1457) & Intro a la Ing. de Software (1716) & Elementos de Mecánica de los fluidos (1805) & Transferencia de calor 2 (1824) & Tecnologia y servicios industriales 1 (Q71)
+Día 10,Calculo Vectorial (1063) & Energía 2 (2394) & Diseño de procesos químicos (Q196),,Tecnología del Hormigón (2371)
+Día 11,Comp Mec de Materiales 1 (1764),Logica (1027),Matemática Discreta 1 (1023) & Teoría de Lenguajes (1325)
+Día 12,Energía 1 (1850) & Electrónica de potencia (5609) & Imágenes médicas (5707),,Calidad de aguas (1854) & Estructuras de Acero (2393) & Fenomenos de transporte en ingenieria de procesos (Q22)
+Día 13,Gestión de Calidad (1954) & Instrumentación Industrial (2706) & Redes eléctricas (5508) & Electrotécnica (5850) & Dinámica y Control de Procesos (Q94),Matemática Discreta 2 (1026) & Fisica 3 (1153) & Señales y Sistemas (1457) & Intro a la Ing. de Software (1716) & Hormigón 1 (2382) & Transferencia de calor y masa 2 (Q74),Fisica 1 (1151) & Transferencia de calor 2 (1824) & Electrotécnica 1 (2108) & Elasticidad (2366) & Patologia de las estructuras (2389) & Antenas y Propagación (5817)

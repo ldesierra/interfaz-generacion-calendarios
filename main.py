@@ -1,16 +1,26 @@
+import argparse
+
 from solve import solve_model
 from constants import Solver, Case
 from generate_schedule import generate_schedule_csv
 from datetime import datetime
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--warm-start",
+        action="store_true",
+        help="Usar solutions/1s1p-v2/seed.sol como punto de partida para Gurobi.",
+    )
+    args = parser.parse_args()
+
     value, time, status, variables, uc_descriptions, solution_status = solve_model(
         Case.large_1s1p,
         Solver.GUROBI_CMD,
         0.5,
         0.5,
         180,
-        warm_start_sol="solutions/1s1p-v2/seed.sol",
+        warm_start_sol="solutions/1s1p-v2/seed.sol" if args.warm_start else None,
     )
 
     print("Status:", status, "-", solution_status)
