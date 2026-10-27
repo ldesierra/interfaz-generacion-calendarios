@@ -15,7 +15,7 @@ interface ResultScreenProps {
 
 function RestartButton({ onRestart }: { onRestart: () => void }) {
   return (
-    <Button type="button" variant="outline" onClick={onRestart}>
+    <Button type="button" variant="outline" onClick={onRestart} className="mb-3">
       <RotateCcw />
       Empezar de nuevo
     </Button>

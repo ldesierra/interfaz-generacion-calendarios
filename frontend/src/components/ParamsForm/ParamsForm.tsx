@@ -19,7 +19,7 @@ const DEFAULT_PARAMS: SolveParams = {
   alpha: 0.5,
   beta: 0.5,
   solver: SOLVERS[0],
-  time_limit_minutes: 15,
+  time_limit_minutes: 180,
   nombre_corrida: "",
 };
 
@@ -144,7 +144,6 @@ export function ParamsForm({ onSubmit, submitting = false, initialValues }: Para
           <Select
             id="solver"
             value={values.solver}
-            disabled={SOLVERS.length === 1}
             onChange={(event) => setValues((prev) => ({ ...prev, solver: event.target.value as Solver }))}
           >
             {SOLVERS.map((solver) => (
@@ -156,7 +155,7 @@ export function ParamsForm({ onSubmit, submitting = false, initialValues }: Para
         </div>
       </div>
 
-      <Button type="submit" disabled={submitting} className="self-end">
+      <Button type="submit" disabled={submitting} className="self-end mb-3">
         {submitting ? "Ejecutando..." : "Ejecutar modelo"}
       </Button>
     </form>

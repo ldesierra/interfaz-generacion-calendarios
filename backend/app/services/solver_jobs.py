@@ -18,14 +18,19 @@ from typing import Optional
 
 from backend.app.core.config import STORAGE_DIR
 from backend.app.schemas.job import JobStatusName
-from constants import Solver
 from solve import solve_model
 
-# CBC, al llegar al time_limit_minutes, puede terminar en varios estados
-# combinados de (status, solution_status) — ver el docstring de
-# `solve.solve_model`. Sólo "Optimal Solution Found" es un óptimo probado;
-# "Solution Found" es la mejor solución entera encontrada antes de que se
-# agotara el tiempo, y "Not Solved" es que ni siquiera se encontró una.
+# Al llegar al time_limit_minutes, el solver puede terminar en varios
+# estados combinados de (status, solution_status) — ver el docstring de
+# `solve.solve_model`. Sólo "Optimal Solution Found" es un óptimo probado.
+# CBC reporta ese truncamiento como status="Optimal"/solution_status=
+# "Solution Found"; Gurobi (vía pulp.GUROBI) en cambio reporta
+# status="Not Solved" tanto si truncó con una solución entera ya
+# encontrada como si no encontró ninguna — no distingue los dos casos por
+# sí solo (ver pulp/apis/gurobi_api.py::findSolutionValues, que no mira
+# `model.SolCount`). Por eso la señal real de "hay solución" acá es
+# `has_solution` (si `solve_model` devolvió un valor objetivo), no el
+# string de status, que es specific a cada solver.
 _TIMEOUT_MESSAGE_WITH_SOLUTION = (
     "Se alcanzó el tiempo límite antes de poder probar que la solución es óptima. "
     "Este calendario es factible y se puede usar, pero podría no ser el mejor "
@@ -38,19 +43,21 @@ _TIMEOUT_MESSAGE_NO_SOLUTION = (
 )
 
 
-def _classify_solution(status: str, solution_status: str) -> tuple[JobStatusName, Optional[str]]:
-    """Traduce (status, solution_status) de PuLP a un status de job + mensaje.
+def _classify_solution(
+    status: str, solution_status: str, has_solution: bool
+) -> tuple[JobStatusName, Optional[str]]:
+    """Traduce (status, solution_status, has_solution) a un status de job + mensaje.
 
     Devuelve (job_status, message). `message` es `None` salvo para
     "timeout" (siempre) y "error" (el detalle del estado inesperado).
     """
     if status == "Optimal" and solution_status == "Optimal Solution Found":
         return "optimal", None
-    if status == "Optimal" and solution_status == "Solution Found":
-        return "timeout", _TIMEOUT_MESSAGE_WITH_SOLUTION
     if status == "Infeasible":
         return "infeasible", None
-    if status == "Not Solved":
+    if status in ("Optimal", "Not Solved"):
+        if has_solution:
+            return "timeout", _TIMEOUT_MESSAGE_WITH_SOLUTION
         return "timeout", _TIMEOUT_MESSAGE_NO_SOLUTION
     return "error", f"El solver terminó con un estado inesperado: {status} ({solution_status})"
 
@@ -85,7 +92,12 @@ def get_job(job_id: str) -> Optional[Job]:
 
 
 def start_solve_job(
-    case_id: str, nombre_corrida: str, alpha: float, beta: float, time_limit_minutes: int
+    case_id: str,
+    nombre_corrida: str,
+    solver: str,
+    alpha: float,
+    beta: float,
+    time_limit_minutes: int,
 ) -> Job:
     job = Job(job_id=uuid.uuid4().hex, case_id=case_id, nombre_corrida=nombre_corrida)
     with _JOBS_LOCK:
@@ -93,21 +105,21 @@ def start_solve_job(
 
     thread = threading.Thread(
         target=_run_job,
-        args=(job, alpha, beta, time_limit_minutes),
+        args=(job, solver, alpha, beta, time_limit_minutes),
         daemon=True,
     )
     thread.start()
     return job
 
 
-def _run_job(job: Job, alpha: float, beta: float, time_limit_minutes: int) -> None:
+def _run_job(job: Job, solver: str, alpha: float, beta: float, time_limit_minutes: int) -> None:
     job.status = "running"
     job.started_at = datetime.now(timezone.utc)
 
     case_dir = STORAGE_DIR / job.case_id
     try:
         value, execution_time, status, variables, uc_descriptions, solution_status = solve_model(
-            case_dir, Solver.PULP_CBC_CMD, alpha, beta, time_limit_minutes
+            case_dir, solver, alpha, beta, time_limit_minutes
         )
     except Exception as exc:
         job.error_message = str(exc)
@@ -116,7 +128,7 @@ def _run_job(job: Job, alpha: float, beta: float, time_limit_minutes: int) -> No
         return
 
     job.finished_at = datetime.now(timezone.utc)
-    new_status, message = _classify_solution(status, solution_status)
+    new_status, message = _classify_solution(status, solution_status, has_solution=value is not None)
 
     if new_status == "error":
         job.error_message = message
