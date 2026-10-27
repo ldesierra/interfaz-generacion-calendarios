@@ -18,6 +18,7 @@ from typing import Optional
 
 from backend.app.core.config import STORAGE_DIR
 from backend.app.schemas.job import JobStatusName
+from backend.app.services.case_storage import warm_start_path
 from solve import solve_model
 
 # Al llegar al time_limit_minutes, el solver puede terminar en varios
@@ -98,6 +99,7 @@ def start_solve_job(
     alpha: float,
     beta: float,
     time_limit_minutes: int,
+    warm_start: bool = False,
 ) -> Job:
     job = Job(job_id=uuid.uuid4().hex, case_id=case_id, nombre_corrida=nombre_corrida)
     with _JOBS_LOCK:
@@ -105,21 +107,29 @@ def start_solve_job(
 
     thread = threading.Thread(
         target=_run_job,
-        args=(job, solver, alpha, beta, time_limit_minutes),
+        args=(job, solver, alpha, beta, time_limit_minutes, warm_start),
         daemon=True,
     )
     thread.start()
     return job
 
 
-def _run_job(job: Job, solver: str, alpha: float, beta: float, time_limit_minutes: int) -> None:
+def _run_job(
+    job: Job,
+    solver: str,
+    alpha: float,
+    beta: float,
+    time_limit_minutes: int,
+    warm_start: bool = False,
+) -> None:
     job.status = "running"
     job.started_at = datetime.now(timezone.utc)
 
     case_dir = STORAGE_DIR / job.case_id
+    warm_start_sol = str(warm_start_path(job.case_id)) if warm_start else None
     try:
         value, execution_time, status, variables, uc_descriptions, solution_status = solve_model(
-            case_dir, solver, alpha, beta, time_limit_minutes
+            case_dir, solver, alpha, beta, time_limit_minutes, warm_start_sol=warm_start_sol
         )
     except Exception as exc:
         job.error_message = str(exc)

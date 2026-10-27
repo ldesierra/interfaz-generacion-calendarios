@@ -15,6 +15,7 @@ class SolveRequest(BaseModel):
     solver: Literal["PULP_CBC_CMD", "GUROBI_CMD"] = "PULP_CBC_CMD"
     time_limit_minutes: int = Field(gt=0, le=240)
     nombre_corrida: str
+    warm_start: bool = False
 
     @field_validator("nombre_corrida")
     @classmethod

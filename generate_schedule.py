@@ -78,6 +78,19 @@ def write_schedule_csv(variables, uc_descriptions, csv_file):
         writer.writerow(row)
 
 
+def write_warm_start_csv(variables, csv_file):
+    """Escribe los valores de una solución resuelta como CSV de warm start
+    (una línea por variable: "nombre_variable,valor"), en el formato que
+    espera `solve._load_sol_file`. Sirve para reusar el resultado de una
+    corrida como warm start de una corrida posterior del mismo caso (ver
+    endpoint /api/jobs/{job_id}/warm-start-download)."""
+    writer = csv.writer(csv_file)
+    for var in variables:
+        value = var.value()
+        if value is not None:
+            writer.writerow([var.name, value])
+
+
 def generate_schedule_csv(variables, uc_descriptions=None, csv_name="schedule.csv"):
     """
     Args:

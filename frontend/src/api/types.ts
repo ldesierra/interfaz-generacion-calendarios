@@ -53,6 +53,7 @@ export interface SolveParams {
   solver: Solver;
   time_limit_minutes: TimeLimitMinutes;
   nombre_corrida: string;
+  warm_start: boolean;
 }
 
 export interface SolveAccepted {
@@ -96,4 +97,54 @@ export interface JobResultResponse {
   // Mensaje accionable para status === "timeout" (con o sin `schedule`).
   message: string | null;
   error_message: string | null;
+}
+
+// --- Tarea 2: edición incremental (alta/modificación de una UC) ---
+
+export interface Trayectoria {
+  carrera: string;
+  semestre: number;
+}
+
+export interface CoincidenciaItem {
+  uc: string;
+  coincidencia: number;
+}
+
+export interface UcSummary {
+  codigo: string;
+  nombre: string;
+}
+
+export interface Catalog {
+  ucs: UcSummary[];
+  carreras: { codigo: string; nombre: string }[];
+  semestres: number[];
+}
+
+export interface UcDetail extends UcSummary {
+  inscriptos: number;
+  trayectoria: Trayectoria[];
+  previas: string[];
+  profesores: string[];
+  coincidencias: CoincidenciaItem[];
+}
+
+// Estado final completo de la UC (no un diff) — ver backend/app/schemas/change.py.
+export interface UcChange {
+  tipo: "alta" | "modificacion";
+  codigo: string;
+  nombre: string | null;
+  inscriptos: number;
+  trayectoria: Trayectoria[];
+  previas: string[];
+  profesores: string[];
+  coincidencias: CoincidenciaItem[];
+}
+
+export interface ChangeIssue {
+  // posición del cambio dentro de la lista enviada
+  index: number;
+  field: string;
+  issue: string;
 }

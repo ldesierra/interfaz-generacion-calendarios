@@ -126,7 +126,7 @@ def test_solve_accepts_gurobi_solver_and_passes_it_through(small_case, monkeypat
 
     captured_solver = {}
 
-    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes):
+    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None):
         captured_solver["value"] = solver_name
         return (1.0, 0.01, "Optimal", [], {}, "Optimal Solution Found")
 
@@ -266,6 +266,102 @@ def test_download_of_unknown_job_returns_404():
     assert response.status_code == 404
 
 
+# --- Warm start ---------------------------------------------------------
+
+
+def test_solve_with_warm_start_and_no_uploaded_file_returns_400(small_case):
+    response = client.post(
+        f"/api/cases/{small_case}/solve", json=_solve_payload(warm_start=True)
+    )
+
+    assert response.status_code == 400
+
+
+def test_warm_start_upload_to_unknown_case_returns_404():
+    response = client.post(
+        "/api/cases/no-existe/warm-start",
+        files={"file": ("warm_start.csv", b"x_1_2_3,1\n", "text/csv")},
+    )
+
+    assert response.status_code == 404
+
+
+def test_solve_with_warm_start_uses_the_uploaded_file(small_case):
+    # Un CSV con nombres de variables que no existen en este modelo: alcanza
+    # con confirmar que se acepta y no rompe el solve (ver docstring de
+    # `solve.solve_model` — las variables desconocidas se ignoran).
+    upload = client.post(
+        f"/api/cases/{small_case}/warm-start",
+        files={"file": ("warm_start.csv", b"x_A_1_1,1\n# comentario\n", "text/csv")},
+    )
+    assert upload.status_code == 204
+
+    status_body = _solve_and_wait(small_case, warm_start=True)
+
+    assert status_body["status"] == "optimal"
+
+
+def test_warm_start_download_after_optimal_job_can_be_used_as_warm_start(small_case):
+    status_body = _solve_and_wait(small_case)
+    job_id = status_body["job_id"]
+
+    response = client.get(f"/api/jobs/{job_id}/warm-start-download")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert 'attachment; filename="warm_start_corrida-1.csv"' in response.headers[
+        "content-disposition"
+    ]
+    lines = response.text.strip().splitlines()
+    assert len(lines) > 0
+    for line in lines:
+        name, value = line.split(",")
+        assert name
+        float(value)  # no debe tirar ValueError
+
+    # El CSV descargado tiene que servir tal cual como warm start de una
+    # corrida posterior — es la única fuente de un warm start "compatible"
+    # con la que cuenta un usuario del front (no tiene acceso a un .sol).
+    upload = client.post(
+        f"/api/cases/{small_case}/warm-start",
+        files={"file": ("warm_start.csv", response.content, "text/csv")},
+    )
+    assert upload.status_code == 204
+
+    second_run = _solve_and_wait(small_case, warm_start=True, nombre_corrida="corrida-2")
+    assert second_run["status"] == "optimal"
+
+
+def test_warm_start_download_before_job_has_a_result_returns_409(small_case):
+    response = client.post(f"/api/cases/{small_case}/solve", json=_solve_payload())
+    job_id = response.json()["job_id"]
+
+    download = client.get(f"/api/jobs/{job_id}/warm-start-download")
+
+    assert download.status_code == 409
+
+
+def test_warm_start_download_of_unknown_job_returns_404():
+    response = client.get("/api/jobs/no-existe/warm-start-download")
+
+    assert response.status_code == 404
+
+
+def test_solve_with_malformed_warm_start_file_reports_a_clear_error(small_case):
+    upload = client.post(
+        f"/api/cases/{small_case}/warm-start",
+        # El CSV del calendario (ver test_download_of_optimal_job_returns_csv_attachment)
+        # no tiene el formato "nombre_variable,valor" — confirma que subirlo
+        # por error da un mensaje accionable en vez de una excepción cruda.
+        files={"file": ("warm_start.csv", b"Dia/Turno,Turno 1,Turno 2,Turno 3\n", "text/csv")},
+    )
+    assert upload.status_code == 204
+
+    status_body = _solve_and_wait(small_case, warm_start=True)
+
+    assert status_body["status"] == "error"
+
+
 # --- Timeout de CBC (subtarea 8) --------------------------------------------
 #
 # Forzar un timeout real de CBC de forma determinística no es viable en un
@@ -278,7 +374,7 @@ def test_download_of_unknown_job_returns_404():
 
 
 def _fake_solve_model_factory(status, solution_status, value=None, variables=None, uc_descriptions=None):
-    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes):
+    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None):
         return (value, 0.01, status, variables or [], uc_descriptions or {}, solution_status)
 
     return _fake_solve_model

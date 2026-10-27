@@ -26,6 +26,24 @@ def case_dir(case_id: str):
     return STORAGE_DIR / case_id
 
 
+WARM_START_FILENAME = "warm_start.csv"
+
+
+def warm_start_path(case_id: str):
+    return case_dir(case_id) / WARM_START_FILENAME
+
+
+def save_warm_start_file(case_id: str, file_obj: IO[bytes]) -> None:
+    target_dir = case_dir(case_id)
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    if hasattr(file_obj, "seek"):
+        file_obj.seek(0)
+
+    with open(warm_start_path(case_id), "wb") as out:
+        out.write(file_obj.read())
+
+
 def save_case_files(case_id: str, files: dict[str, IO[bytes]]) -> None:
     target_dir = case_dir(case_id)
     target_dir.mkdir(parents=True, exist_ok=True)
