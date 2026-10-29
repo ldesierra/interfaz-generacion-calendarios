@@ -89,7 +89,9 @@ async def get_job_result(job_id: str):
 
     if job.status == "infeasible":
         return JobResultResponse(
-            status="infeasible", execution_time_seconds=job.elapsed_seconds()
+            status="infeasible",
+            execution_time_seconds=job.elapsed_seconds(),
+            infeasibility_reasons=job.infeasibility_reasons,
         )
 
     if job.status == "timeout" and job.result is None:

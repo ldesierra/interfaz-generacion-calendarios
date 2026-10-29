@@ -2,7 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, getJobResult } from "../../api/client";
-import type { JobResultResponse } from "../../api/types";
+import type { JobResultResponse, UcChange } from "../../api/types";
+import { parseCalendarioCsv } from "../../lib/calendario";
 import { ResultScreen } from "./ResultScreen";
 
 vi.mock("../../api/client", async () => {
@@ -128,5 +129,58 @@ describe("ResultScreen", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/el job no existe/i);
     await user.click(screen.getByRole("button", { name: /empezar de nuevo/i }));
     expect(onRestart).toHaveBeenCalled();
+  });
+
+  it("explica la causa cuando el backend la informa", async () => {
+    vi.mocked(getJobResult).mockResolvedValue({
+      status: "infeasible",
+      objective_value: null,
+      execution_time_seconds: 1,
+      schedule: null,
+      proven_optimal: null,
+      message: null,
+      error_message: null,
+      infeasibility_reasons: [
+        "El calendario vigente ya incumple restricciones:",
+        "Día 1 Turno 1 supera la capacidad.",
+        "UC A y UC B comparten profesor.",
+      ],
+    });
+
+    render(<ResultScreen jobId="job-1" onRestart={vi.fn()} />);
+
+    const box = await screen.findByTestId("infeasibility-reasons");
+    expect(box).toHaveTextContent("El calendario vigente ya incumple restricciones:");
+    expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Día 1 Turno 1 supera la capacidad.",
+      "UC A y UC B comparten profesor.",
+    ]);
+    expect(screen.queryByText(/ajustando alpha/i)).not.toBeInTheDocument();
+  });
+
+  it("resalta las UCs cambiadas y dice dónde quedaron y dónde estaban", async () => {
+    vi.mocked(getJobResult).mockResolvedValue(optimalResult());
+    const change = (tipo: UcChange["tipo"], codigo: string, nombre: string): UcChange => ({
+      tipo, codigo, nombre, inscriptos: 1, trayectoria: [], previas: [], profesores: [], coincidencias: [],
+    });
+    const anterior = parseCalendarioCsv("Día/Turno,Turno 1\nDía 1,UC A (A)\nDía 2,UC B (B)\n");
+
+    render(
+      <ResultScreen
+        jobId="job-1"
+        onRestart={vi.fn()}
+        changes={[change("modificacion", "A", "UC A"), change("alta", "Z", "UC Z")]}
+        calendarioAnterior={anterior}
+      />,
+    );
+
+    const resumen = await screen.findByTestId("cambios-ubicados");
+    // optimalResult: B en Día 1, A en Día 2 (A estaba en Día 1); Z no quedó en la grilla.
+    expect(resumen).toHaveTextContent("UC A (A)→ Día 2 Turno 1 (antes: Día 1 Turno 1)");
+    expect(resumen).toHaveTextContent("UC Z (Z)→ no quedó ubicada");
+    const highlighted = document.querySelectorAll("[data-highlight]");
+    expect(highlighted).toHaveLength(1);
+    expect(highlighted[0]).toHaveTextContent("UC A (A)");
+    expect(highlighted[0]).toHaveTextContent("Modificada");
   });
 });
