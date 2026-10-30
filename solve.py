@@ -85,6 +85,21 @@ def _load_sol_file(path):
     return values
 
 
+def _hay_asignacion(x_vars) -> bool:
+    """¿Las variables x codifican una asignación, o el solver cortó sin nada?
+
+    Cuando el solver termina sin ninguna solución entera, no todos devuelven
+    lo mismo: Gurobi deja las variables en None, pero HiGHS y CBC las dejan
+    todas en 0. En ese segundo caso `pl.value(objetivo)` da 0.0 en vez de
+    None, que es un valor objetivo perfectamente plausible, y quien llame a
+    solve_model no tiene cómo distinguirlo de un calendario de costo cero.
+    La señal confiable es si alguna x quedó en 1: AsignacionUnica obliga a que
+    haya exactamente una por UC, así que una solución real nunca las tiene
+    todas en 0.
+    """
+    return any(var.varValue is not None and var.varValue > 0.5 for var in x_vars)
+
+
 def solve_model(
     source,
     solver_name: Solver,
@@ -106,10 +121,17 @@ def solve_model(
             sido calculada con una versión anterior del modelo, con más o
             menos pares de UC), pasarla acá deja que Gurobi arranque de ahí
             en vez de buscar a ciegas. Variables del .sol que no existen en
-            el modelo actual se ignoran.
+            el modelo actual se ignoran, así que una semilla vieja (con
+            variables w/z/y de la formulación anterior) sigue sirviendo: de
+            ella sólo se aprovechan las x, que son las que importan.
 
     Returns:
         (valor_objetivo, tiempo_ejecucion_seg, status, variables, uc_descriptions, solution_status)
+
+        `valor_objetivo` es None si el solver terminó sin ninguna solución
+        entera, sin importar qué haya devuelto cada solver para las variables
+        (ver `_hay_asignacion`). Quien llame puede usar `valor_objetivo is
+        None` como "no hay calendario".
 
         `status` (`pl.LpStatus`) y `solution_status` (`pl.LpSolution`) hay
         que mirarlos juntos: CBC, al llegar al `time_limit_minutes` con una
@@ -137,8 +159,6 @@ def solve_model(
     ins = datos.get("ins")
     co = datos.get("co")
     dist_sem = datos.get("dist_sem")
-    DS = datos.get("DS")
-    M = datos.get("M")
     dist_peso = datos.get("dist_peso")
     time_value = datos.get("time_value")
     # endregion
@@ -156,57 +176,24 @@ def solve_model(
             for t in Td[d]:
                 x[(c, d, t)] = pl.LpVariable(f"x_{c}_{d}_{t}", cat=pl.LpBinary)
 
-    # Variable binaria para identificar si distancia entre las evaluaciones de dos UC es ds
-    w = {}
-    for c1, c2 in PARES_UC:
-        for ds in DS:
-            w[(c1, c2, ds)] = pl.LpVariable(f"w_{c1}_{c2}_{ds}", cat=pl.LpBinary)
-
-    # Variables para definir la distancia entre las evaluaciones de dos UC
-    z = {}  # Valor absoluto de la diferencia entre las evaluaciones de c1 y c2
-    z_plus = {}  # Indica la parte positiva de z
-    z_minus = {}  # Indica la parte negativa de z
-    y = {}  # Indica si z_plus o z_minus es activo
-
-    for c1, c2 in PARES_UC:
-        z[(c1, c2)] = pl.LpVariable(f"z_{c1}_{c2}", lowBound=0)
-        z_plus[(c1, c2)] = pl.LpVariable(f"z_plus_{c1}_{c2}", lowBound=0)
-        z_minus[(c1, c2)] = pl.LpVariable(f"z_minus_{c1}_{c2}", lowBound=0)
-        y[(c1, c2)] = pl.LpVariable(f"y_{c1}_{c2}", cat=pl.LpBinary)
+    # Costo que aporta cada par de UC a la función objetivo. Es continua: su
+    # valor queda determinado por x a través de las restricciones Costo_* (ver
+    # la región de restricciones), así que las únicas variables enteras del
+    # modelo son las x.
+    cost = {
+        (c1, c2): pl.LpVariable(f"cost_{c1}_{c2}", lowBound=0) for c1, c2 in PARES_UC
+    }
 
     if warm_start_sol is not None:
         seed_values = _load_sol_file(warm_start_sol)
-        for var_dict in (x, w, z, z_plus, z_minus, y):
+        for var_dict in (x, cost):
             for var in var_dict.values():
                 if var.name in seed_values:
                     var.setInitialValue(seed_values[var.name], check=False)
     # endregion
 
     # region DEFINICIÓN DE LA FUNCIÓN OBJETIVO
-
-    # Valor máximo de concurrencia entre UC diferentes. Se utiliza para normalizar la concurrencia entre dos UC.
-    max_co = max(co[c1, c2] for c1, c2 in co if c1 != c2) + 1
-
-    problem += pl.lpSum(
-        # Para cada par de cursos
-        pl.lpSum(
-            # Multiplicamos el peso de la distancia por la variable binaria correspondiente
-            dist_peso[ds]
-            * (co[c1, c2] / max_co + alpha * (1 / (dist_sem[c1, c2] + 1)))
-            * w[c1, c2, ds]
-            for ds in DS
-        )
-        for c1, c2 in PARES_UC
-    ) + pl.lpSum(
-        # Para los pares de previas
-        pl.lpSum(
-            beta
-            * min(1, ds / 5)
-            * (w[c1, c2, ds] if (c1, c2, ds) in w else w[c2, c1, ds])
-            for ds in DS
-        )
-        for c1, c2 in P
-    )
+    problem += pl.lpSum(cost.values())
     # endregion
 
     # region DEFINICIÓN DE LAS RESTRICCIONES
@@ -263,42 +250,81 @@ def solve_model(
     for c in PA.keys():
         problem += (pl.lpSum(x[c, d, t] for d, t in PA[c]) == 1, f"PreAsignacion_{c}")
 
+    # Costo de cada par de UC según los turnos que ocupan.
+    #
+    # El costo de un par depende sólo de la distancia entre los dos turnos
+    # asignados, así que se puede tabular: q[s1, s2] es lo que aporta al
+    # objetivo que c1 vaya en el turno s1 y c2 en el s2. Como cada UC ocupa
+    # exactamente un turno (ver AsignacionUnica), para el s1 que c1 realmente
+    # usa la fila queda
+    #     cost >= sum_s2 q(s1, s2) * x[c2, s2] = q(s1, s2_real)
+    # y para cualquier otro s1 el término -Mq la afloja. Como se minimiza,
+    # cost baja hasta el valor exacto del par.
+    #
+    # Es la misma función objetivo que la versión con w/z/z_plus/z_minus/y,
+    # pero sin ninguna binaria auxiliar. Aquellas quedaban determinadas por x
+    # y aun así el solver ramificaba sobre ellas: eran el 96% de las binarias
+    # del modelo, y la cadena big-M que las ligaba casi no propagaba, al punto
+    # de que en caso_1s1p no aparecía ninguna solución factible. Acá la
+    # linealización acepta cualquier q, convexa o no, así que tampoco hace
+    # falta tratar distinto al término de previas (que es cóncavo y era
+    # justamente lo que obligaba a que w fuera binaria).
+    max_co = max(co[c1, c2] for c1, c2 in co if c1 != c2) + 1
+
+    slots = [(d, t) for d in D for t in Td[d]]
+    dist = {
+        (s1, s2): abs(time_value[s1] - time_value[s2]) for s1 in slots for s2 in slots
+    }
+    slots_cercanos = {s1: [s2 for s2 in slots if dist[s1, s2] < 2] for s1 in slots}
+
+    # Cuántas veces aparece cada par en P: el término de previas se suma una
+    # vez por aparición, igual que en la versión anterior del objetivo.
+    pares_uc_set = set(PARES_UC)
+    previas_por_par = {}
+    for c1, c2 in P:
+        if (c1, c2) in pares_uc_set:
+            par = (c1, c2)
+        elif (c2, c1) in pares_uc_set:
+            par = (c2, c1)
+        else:
+            raise KeyError(f"El par de previas ({c1}, {c2}) no está en PARES_UC")
+        previas_por_par[par] = previas_por_par.get(par, 0) + 1
+
     for c1, c2 in PARES_UC:
-        # Calcular la diferencia entre los días asignados a c1 y c2
-        day_time_c1 = pl.lpSum(
-            time_value[(d, t)] * x[c1, d, t] for d in D for t in Td[d]
-        )
-        day_time_c2 = pl.lpSum(
-            time_value[(d, t)] * x[c2, d, t] for d in D for t in Td[d]
-        )
+        coef = co[c1, c2] / max_co + alpha * (1 / (dist_sem[c1, c2] + 1))
+        n_previas = previas_por_par.get((c1, c2), 0)
 
-        # Restricciones para hacer que z valga efectivamente la diferencia absoluta
-        problem += (
-            day_time_c1 - day_time_c2 == z_plus[c1, c2] - z_minus[c1, c2],
-            f"Diferencia_Dias_{c1}_{c2}",
-        )
+        q = {}
+        for s1 in slots:
+            for s2 in slots:
+                ds = dist[s1, s2]
+                q[s1, s2] = coef * dist_peso[ds] + n_previas * beta * min(1, ds / 5)
 
-        problem += (
-            z[c1, c2] == z_plus[c1, c2] + z_minus[c1, c2],
-            f"Distancia_Absoluta_{c1}_{c2}",
-        )
+        # Mq alcanza para aflojar la fila cuando c1 no va en s1: todo q es >= 0
+        # y cost tiene lowBound=0, así que el lado derecho queda <= 0.
+        Mq = max(q.values())
 
-        problem += pl.lpSum(w[c1, c2, ds] for ds in DS) == 1
-        problem += z[c1, c2] == pl.lpSum(ds * w[c1, c2, ds] for ds in DS)
-
-        # Usar y para controlar qué parte de z_plus o z_minus está activa
-        problem += (z_plus[c1, c2] <= M * y[c1, c2], f"Control_z_plus_{c1}_{c2}")
-        problem += (
-            z_minus[c1, c2] <= M * (1 - y[c1, c2]),
-            f"Control_z_minus_{c1}_{c2}",
-        )
-
-        # Si dos cursos tienen alta coincidencia, deben asignarse al menos con una separacion de 2 dias.
-        if co[c1, c2] >= alta_co:
+        for s1 in slots:
             problem += (
-                z[c1, c2] >= 2,
-                f"Separacion_Minima_{c1}_{c2}",
+                cost[c1, c2]
+                >= pl.lpSum(q[s1, s2] * x[(c2,) + s2] for s2 in slots)
+                - Mq * (1 - x[(c1,) + s1]),
+                f"Costo_{c1}_{c2}_Dia_{s1[0]}_Turno_{s1[1]}",
             )
+
+        # Si dos cursos tienen alta coincidencia, deben asignarse al menos con
+        # una separacion de 2 dias. Antes esto se imponía como z >= 2, o sea a
+        # través de toda la cadena big-M; escrito directo sobre x es una
+        # familia tipo clique que el solver sí propaga mientras busca una
+        # solución factible.
+        if co[c1, c2] >= alta_co:
+            for s1 in slots:
+                problem += (
+                    x[(c1,) + s1]
+                    + pl.lpSum(x[(c2,) + s2] for s2 in slots_cercanos[s1])
+                    <= 1,
+                    f"Separacion_Minima_{c1}_{c2}_Dia_{s1[0]}_Turno_{s1[1]}",
+                )
     # endregion
 
     # region SOLUCIÓN DEL PROBLEMA
@@ -337,6 +363,11 @@ def solve_model(
             )
         case Solver.CPLEX_CMD:
             solver = pl.CPLEX_CMD(msg=1, threads=cpu_cores, timeLimit=time_limit)
+        case Solver.HIGHS:
+            # HiGHS (open source) via highspy, que ya viene como dependencia de
+            # PuLP. Es bastante mas fuerte que CBC en este modelo y no necesita
+            # licencia, asi que es la alternativa libre a Gurobi.
+            solver = pl.HiGHS(msg=1, threads=cpu_cores, timeLimit=time_limit)
         case Solver.PULP_CBC_CMD:
             solver = pl.PULP_CBC_CMD(msg=1, threads=cpu_cores, timeLimit=time_limit)
         case _:
@@ -348,8 +379,12 @@ def solve_model(
 
     execution_time = end_time - start_time
 
+    objective_value = (
+        pl.value(problem.objective) if _hay_asignacion(x.values()) else None
+    )
+
     return (
-        pl.value(problem.objective),
+        objective_value,
         execution_time,
         pl.LpStatus[problem.status],
         problem.variables(),

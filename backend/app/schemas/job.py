@@ -12,7 +12,7 @@ JobStatusName = Literal["pending", "running", "optimal", "infeasible", "timeout"
 class SolveRequest(BaseModel):
     alpha: float = Field(ge=0, le=1)
     beta: float = Field(ge=0, le=1)
-    solver: Literal["PULP_CBC_CMD", "GUROBI_CMD"] = "PULP_CBC_CMD"
+    solver: Literal["PULP_CBC_CMD", "GUROBI_CMD", "HiGHS"] = "PULP_CBC_CMD"
     time_limit_minutes: int = Field(gt=0, le=240)
     nombre_corrida: str
     warm_start: bool = False

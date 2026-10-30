@@ -36,7 +36,7 @@ export interface SchemaValidationError {
   details: ValidationIssue[];
 }
 
-export const SOLVERS = ["GUROBI_CMD", "PULP_CBC_CMD"] as const;
+export const SOLVERS = ["GUROBI_CMD", "HiGHS", "PULP_CBC_CMD"] as const;
 export type Solver = (typeof SOLVERS)[number];
 
 // Valores del enum Weight en constants.py — alpha/beta se eligen de este set.
