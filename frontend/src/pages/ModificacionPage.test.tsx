@@ -20,6 +20,13 @@ vi.mock("../components/FileUploadForm/FileUploadForm", () => ({
 
 const CSV = "Día/Turno,Turno 1\nDía 1,Calculo (1061)\n";
 
+const SAVED = {
+  evaluaciones: 1,
+  formato: "generado" as const,
+  ubicaciones: [{ codigo: "1061", nombre: "Calculo", dia: 1, turno: 1 }],
+  desconocidas: [],
+};
+
 async function reachDatosStep() {
   render(
     <MemoryRouter>
@@ -42,7 +49,7 @@ describe("ModificacionPage", () => {
   afterEach(() => vi.resetAllMocks());
 
   it("sube el calendario al crear el caso y avanza a los cambios", async () => {
-    vi.mocked(uploadCalendar).mockResolvedValue({ evaluaciones: 1 });
+    vi.mocked(uploadCalendar).mockResolvedValue(SAVED);
     await reachDatosStep();
     await userEvent.click(screen.getByRole("button", { name: "crear caso" }));
 
@@ -62,7 +69,7 @@ describe("ModificacionPage", () => {
   });
 
   it("al continuar desde los cambios deriva el caso y muestra el resumen", async () => {
-    vi.mocked(uploadCalendar).mockResolvedValue({ evaluaciones: 1 });
+    vi.mocked(uploadCalendar).mockResolvedValue(SAVED);
     vi.mocked(deriveCase).mockResolvedValue({
       derived_case_id: "d1",
       fixed_ucs: 64,
@@ -89,5 +96,18 @@ describe("ModificacionPage", () => {
       "64 evaluaciones quedan fijas; el modelo ubica 2 UCs (1061, 9999).",
     );
     expect(screen.getByText(/no figuran en el calendario vigente/)).toBeInTheDocument();
+  });
+
+  it("avisa qué evaluaciones de la planilla vieja no son UCs del caso", async () => {
+    vi.mocked(uploadCalendar).mockResolvedValue({
+      ...SAVED,
+      formato: "viejo",
+      ubicaciones: [{ codigo: "1061", nombre: "Calculo", dia: 1, turno: null }],
+      desconocidas: ["GAL 2", "AGPI"],
+    });
+    await reachDatosStep();
+    await userEvent.click(screen.getByRole("button", { name: "crear caso" }));
+
+    expect(await screen.findByTestId("calendario-desconocidas")).toHaveTextContent("GAL 2, AGPI");
   });
 });

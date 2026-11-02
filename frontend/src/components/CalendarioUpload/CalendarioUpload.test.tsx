@@ -27,6 +27,25 @@ describe("CalendarioUpload", () => {
     expect(onContinue.mock.calls[0][0].totalEvaluaciones).toBe(3);
   });
 
+  it("acepta la planilla vieja y muestra las evaluaciones por día, sin turnos", async () => {
+    const planilla =
+      ",,25/4,27/4\n" +
+      ",Semestre,Día 1,Día 2\n" +
+      "Eléctrica,Primero,GAL 2,CDIV/ CDIVV\n" +
+      "Civil,Primero,gal 2,CDIV\n";
+    render(<CalendarioUpload onContinue={vi.fn()} />);
+    await pick("planilla.csv", planilla);
+
+    expect(await screen.findByTestId("calendario-resumen")).toHaveTextContent(
+      "3 evaluaciones en 2 días.",
+    );
+    expect(screen.getByTestId("calendario-resumen")).toHaveTextContent("no indica el turno");
+    expect(screen.getByRole("columnheader", { name: "Evaluaciones" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Turno 1" })).not.toBeInTheDocument();
+    // "GAL 2" está en las dos carreras y se muestra una sola vez.
+    expect(screen.getAllByText("GAL 2")).toHaveLength(1);
+  });
+
   it("muestra el error y deja Continuar deshabilitado con un archivo inválido", async () => {
     render(<CalendarioUpload onContinue={vi.fn()} />);
     await pick("malo.csv", "a,b\n1,2\n");

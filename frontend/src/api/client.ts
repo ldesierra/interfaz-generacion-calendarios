@@ -14,6 +14,7 @@ import {
   type UcChange,
   type UcDetail,
 } from "./types";
+import type { FormatoCalendario } from "../lib/calendario";
 
 export class ApiError extends Error {
   status: number;
@@ -170,7 +171,25 @@ export async function putChanges(caseId: string, changes: UcChange[]): Promise<U
   throw new ApiError(await parseJsonError(response), response.status);
 }
 
-export async function uploadCalendar(caseId: string, file: File): Promise<{ evaluaciones: number }> {
+export interface CalendarUbicacion {
+  codigo: string;
+  nombre: string;
+  dia: number;
+  // null en el formato viejo: la planilla sólo indica el día.
+  turno: number | null;
+}
+
+export interface CalendarSaved {
+  evaluaciones: number;
+  formato: FormatoCalendario;
+  // El calendario ya resuelto contra el caso (en el formato viejo, es acá
+  // donde los nombres de la planilla se convierten en códigos de UC).
+  ubicaciones: CalendarUbicacion[];
+  // Evaluaciones de la planilla que no son UCs del caso.
+  desconocidas: string[];
+}
+
+export async function uploadCalendar(caseId: string, file: File): Promise<CalendarSaved> {
   const formData = new FormData();
   formData.append("file", file);
   const response = await fetch(`/api/cases/${caseId}/calendar`, { method: "PUT", body: formData });

@@ -3,7 +3,9 @@ import type { CalendarioExistente } from "./calendario";
 
 export interface Ubicacion {
   dia: number;
-  turno: number;
+  // null cuando el calendario vigente venía en el formato viejo, que no
+  // indica el turno.
+  turno: number | null;
 }
 
 export interface CambioUbicado {
@@ -33,13 +35,8 @@ export function ubicacionEnGrilla(schedule: ScheduleGrid, codigo: string): Ubica
 }
 
 function ubicacionEnCalendario(calendario: CalendarioExistente, codigo: string): Ubicacion | null {
-  for (const dia of calendario.dias) {
-    for (const turno of calendario.turnos) {
-      const evaluaciones = calendario.grilla[String(dia)]?.[String(turno)] ?? [];
-      if (evaluaciones.some((ev) => ev.codigo === codigo)) return { dia, turno };
-    }
-  }
-  return null;
+  const ev = calendario.evaluaciones.find((e) => e.codigo === codigo);
+  return ev ? { dia: ev.dia, turno: ev.turno } : null;
 }
 
 export function ubicarCambios(
