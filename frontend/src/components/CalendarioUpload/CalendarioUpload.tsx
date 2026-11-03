@@ -45,8 +45,8 @@ export function CalendarioUpload({ onContinue }: CalendarioUploadProps) {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-muted-foreground">
-        Subí el calendario vigente en el mismo formato que descarga la generación (filas “Día N”,
-        columnas “Turno N”).
+        Subí el calendario vigente en el mismo formato que descarga la generación o en el formato
+        viejo.
       </p>
 
       <div
@@ -91,8 +91,10 @@ export function CalendarioUpload({ onContinue }: CalendarioUploadProps) {
       {calendario && (
         <>
           <p className="text-sm text-muted-foreground" data-testid="calendario-resumen">
-            {calendario.totalEvaluaciones} evaluaciones en {calendario.dias.length} días y{" "}
-            {calendario.turnos.length} turnos.
+            {calendario.totalEvaluaciones} evaluaciones en {calendario.dias.length} días
+            {calendario.turnos.length > 0 ? ` y ${calendario.turnos.length} turnos.` : "."}
+            {calendario.formato === "viejo" &&
+              " La planilla no indica el turno: cada evaluación queda fija al día y el modelo elige el turno."}
           </p>
           <CalendarioTable calendario={calendario} />
         </>

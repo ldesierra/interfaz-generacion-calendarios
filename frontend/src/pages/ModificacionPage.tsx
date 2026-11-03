@@ -6,6 +6,7 @@ import {
   solveCase,
   uploadCalendar,
   uploadWarmStart,
+  type CalendarSaved,
   type DerivedCase,
 } from "../api/client";
 import type { SolveParams, UcChange } from "../api/types";
@@ -33,12 +34,30 @@ const STEPS: { kind: StepKind; label: string }[] = [
 
 function calendarioCodigos(calendario: CalendarioExistente): Set<string> {
   const codigos = new Set<string>();
-  for (const turnos of Object.values(calendario.grilla)) {
-    for (const evaluaciones of Object.values(turnos)) {
-      for (const ev of evaluaciones) codigos.add(ev.codigo);
-    }
+  for (const ev of calendario.evaluaciones) {
+    if (ev.codigo) codigos.add(ev.codigo);
   }
   return codigos;
+}
+
+// El calendario que devuelve el backend ya está resuelto contra el caso: en el
+// formato viejo es acá donde los nombres de la planilla pasan a ser códigos de
+// UC y las columnas, días del caso.
+function calendarioResuelto(saved: CalendarSaved): CalendarioExistente {
+  const evaluaciones = saved.ubicaciones.map((u) => ({
+    nombre: u.nombre,
+    codigo: u.codigo,
+    dia: u.dia,
+    turno: u.turno,
+  }));
+  const unicos = (valores: number[]) => [...new Set(valores)].sort((a, b) => a - b);
+  return {
+    formato: saved.formato,
+    dias: unicos(evaluaciones.map((ev) => ev.dia)),
+    turnos: unicos(evaluaciones.flatMap((ev) => (ev.turno === null ? [] : [ev.turno]))),
+    evaluaciones,
+    totalEvaluaciones: evaluaciones.length,
+  };
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -48,6 +67,8 @@ function errorMessage(err: unknown, fallback: string): string {
 export function ModificacionPage() {
   const [step, setStep] = useState<StepKind>("calendario");
   const [calendario, setCalendario] = useState<{ data: CalendarioExistente; file: File } | null>(null);
+  // Formato viejo: evaluaciones de la planilla que no son UCs del caso.
+  const [desconocidas, setDesconocidas] = useState<string[]>([]);
   const [caseId, setCaseId] = useState<string | null>(null);
   const [changes, setChanges] = useState<UcChange[]>([]);
   const [derived, setDerived] = useState<DerivedCase | null>(null);
@@ -71,7 +92,9 @@ export function ModificacionPage() {
     setBusy(true);
     setError(null);
     try {
-      await uploadCalendar(newCaseId, calendario.file);
+      const saved = await uploadCalendar(newCaseId, calendario.file);
+      setCalendario({ ...calendario, data: calendarioResuelto(saved) });
+      setDesconocidas(saved.desconocidas);
       setCaseId(newCaseId);
       setChanges([]);
       setStep("cambio");
@@ -190,6 +213,14 @@ export function ModificacionPage() {
                 <CardTitle>3. Cambios a realizar</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
+                {desconocidas.length > 0 && (
+                  <Alert>
+                    <AlertDescription data-testid="calendario-desconocidas">
+                      Estas evaluaciones de la planilla no son unidades curriculares del caso, así
+                      que no se tuvieron en cuenta: {desconocidas.join(", ")}.
+                    </AlertDescription>
+                  </Alert>
+                )}
                 <CambiosStep
                   caseId={caseId}
                   codigosEnCalendario={calendarioCodigos(calendario.data)}

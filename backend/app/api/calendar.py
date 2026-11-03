@@ -1,14 +1,26 @@
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from backend.app.services import derived_case
+from backend.app.services import derived_case, uc_change
 from backend.app.services.case_storage import case_dir, is_valid_case_id
 
 router = APIRouter(prefix="/api/cases/{case_id}")
 
 
+class Ubicacion(BaseModel):
+    codigo: str
+    nombre: str
+    dia: int
+    # `None` en el formato viejo: la planilla sólo indica el día.
+    turno: int | None
+
+
 class CalendarSaved(BaseModel):
     evaluaciones: int
+    formato: str  # "generado" | "viejo"
+    ubicaciones: list[Ubicacion]
+    # Formato viejo: evaluaciones de la planilla que no son UCs del caso.
+    desconocidas: list[str]
 
 
 class DerivedCaseCreated(BaseModel):
@@ -32,10 +44,19 @@ async def put_calendar(case_id: str, file: UploadFile = File(...)):
     except UnicodeDecodeError:
         raise HTTPException(status_code=422, detail="el calendario no es un CSV en UTF-8")
     try:
-        placements = derived_case.save_calendar(case_id, text)
+        loaded = derived_case.save_calendar(case_id, text)
     except derived_case.DerivedCaseError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return CalendarSaved(evaluaciones=len(placements))
+    nombres = {uc.codigo: uc.nombre for uc in uc_change.list_ucs(case_id)}
+    return CalendarSaved(
+        evaluaciones=len(loaded.placements),
+        formato=loaded.formato,
+        ubicaciones=[
+            Ubicacion(codigo=p.codigo, nombre=nombres.get(p.codigo, p.codigo), dia=p.dia, turno=p.turno)
+            for p in loaded.placements
+        ],
+        desconocidas=loaded.desconocidas,
+    )
 
 
 @router.post("/derive", status_code=201, response_model=DerivedCaseCreated)

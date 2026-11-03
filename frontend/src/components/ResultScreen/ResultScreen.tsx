@@ -20,7 +20,7 @@ interface ResultScreenProps {
 }
 
 function ubicacionTexto({ dia, turno }: Ubicacion) {
-  return `Día ${dia} Turno ${turno}`;
+  return turno === null ? `Día ${dia}` : `Día ${dia} Turno ${turno}`;
 }
 
 function RestartButton({ onRestart }: { onRestart: () => void }) {
@@ -181,7 +181,9 @@ export function ResultScreen({ jobId, onRestart, changes, calendarioAnterior = n
                   {cambio.anterior &&
                     (cambio.nueva &&
                     cambio.nueva.dia === cambio.anterior.dia &&
-                    cambio.nueva.turno === cambio.anterior.turno
+                    // El formato viejo no trae turno: si el día es el mismo,
+                    // la UC sigue donde estaba.
+                    (cambio.anterior.turno === null || cambio.nueva.turno === cambio.anterior.turno)
                       ? " (sigue en el mismo lugar)"
                       : ` (antes: ${ubicacionTexto(cambio.anterior)})`)}
                 </span>

@@ -10,7 +10,12 @@ from fastapi.testclient import TestClient
 from backend.app.core import config
 from backend.app.main import app
 from backend.app.services import feasibility, solver_jobs
-from backend.app.services.calendar_parser import CalendarParseError, parse_calendar_csv
+from backend.app.services.calendar_parser import (
+    CalendarParseError,
+    is_legacy_calendar,
+    parse_calendar_csv,
+    parse_legacy_calendar_csv,
+)
 from backend.app.services.case_storage import case_dir
 from backend.app.services.case_validation import REQUIRED_FILES
 from backend.tests.test_jobs_api import _TINY_CASE_FILES
@@ -114,10 +119,88 @@ def test_parser_reads_placements_and_rejects_duplicates():
         parse_calendar_csv("a,b\n1,2\n")
 
 
+# --- parser de la planilla vieja ---
+
+# Columnas = días, filas = (carrera, semestre); la misma evaluación se repite
+# en cada carrera que la tiene y una celda puede listar varias con "/".
+TINY_PLANILLA = (
+    ",,10/4,11/4\n"
+    ",Semestre,Día 1,Día 2\n"
+    "Carrera 1,Primero,UC A / UC B,UC C\n"
+    ",Tercero,uc a,Otra cosa\n"
+)
+
+
+def test_legacy_parser_dedupes_names_and_splits_cells():
+    assert is_legacy_calendar(TINY_PLANILLA)
+    assert not is_legacy_calendar(TINY_CALENDAR)
+
+    planilla = parse_legacy_calendar_csv(TINY_PLANILLA)
+    assert planilla.columnas == 2
+    # "UC A" y "uc a" son la misma evaluación del mismo día: queda una sola.
+    assert [(e.nombre, e.columna) for e in planilla.entradas] == [
+        ("UC A", 0), ("UC B", 0), ("UC C", 1), ("Otra cosa", 1),
+    ]
+
+
+def test_put_calendar_accepts_the_legacy_spreadsheet(tiny):
+    body = _put_calendar(tiny, TINY_PLANILLA).json()
+    assert body["formato"] == "viejo"
+    assert body["evaluaciones"] == 3
+    # La planilla no dice el turno: sólo el día.
+    assert body["ubicaciones"] == [
+        {"codigo": "A", "nombre": "UC A", "dia": 1, "turno": None},
+        {"codigo": "B", "nombre": "UC B", "dia": 1, "turno": None},
+        {"codigo": "C", "nombre": "UC C", "dia": 2, "turno": None},
+    ]
+    assert body["desconocidas"] == ["Otra cosa"]
+
+
+def test_legacy_calendar_maps_day_columns_by_position(tiny, isolated_storage):
+    # Los ids de dias.csv no tienen por qué ser 1..N: la N-ésima columna "Día"
+    # es el N-ésimo día del caso.
+    (isolated_storage / tiny / "dias.csv").write_text("id\n4\n7\n")
+    (isolated_storage / tiny / "turnos_dias.csv").write_text("id_dia,id_turno\n4,1\n7,1\n")
+    body = _put_calendar(tiny, TINY_PLANILLA).json()
+    assert [(u["codigo"], u["dia"]) for u in body["ubicaciones"]] == [("A", 4), ("B", 4), ("C", 7)]
+
+
+def test_legacy_calendar_rejects_mismatched_days_and_repeated_ucs(tiny):
+    r = _put_calendar(tiny, ",Semestre,Día 1\nCarrera 1,Primero,UC A\n")
+    assert r.status_code == 422 and "columnas de día" in r.json()["detail"]
+
+    r = _put_calendar(tiny, ",Semestre,Día 1,Día 2\nCarrera 1,Primero,UC A,UC A\n")
+    assert r.status_code == 422 and "más de un día" in r.json()["detail"]
+
+    r = _put_calendar(tiny, ",Semestre,Día 1,Día 2\nCarrera 1,Primero,Otra cosa,\n")
+    assert r.status_code == 422 and "Ninguna evaluación" in r.json()["detail"]
+
+
+def test_derive_fixes_legacy_ucs_to_the_whole_day(isolated_storage):
+    # Día 1 con dos turnos: una UC fijada sólo por día queda preasignada a los
+    # dos, y el modelo elige el turno.
+    files = {**_TINY_CASE_FILES,
+             "turnos": "id\n1\n2\n",
+             "turnos_dias": "id_dia,id_turno\n1,1\n1,2\n2,1\n",
+             "capacidad": "id_dia,id_turno,capacidad\n1,1,100\n1,2,100\n2,1,100\n"}
+    case = _write_case(isolated_storage, "b" * 32, files)
+    _put_calendar(case, TINY_PLANILLA)
+    _put_changes(case, _alta("D", trayectoria=[{"carrera": "K1", "semestre": 3}]))
+
+    body = client.post(f"/api/cases/{case}/derive").json()
+    assert body["fixed_ucs"] == 3
+    assert any("Otra cosa" in w for w in body["warnings"])
+    pa = _rows(body["derived_case_id"], "preasignaciones")
+    assert [(r["unidad_curricular"], r["dia"], r["turno"]) for r in pa] == [
+        ("A", "1", "1"), ("A", "1", "2"), ("B", "1", "1"), ("B", "1", "2"), ("C", "2", "1"),
+    ]
+
 # --- PUT /calendar ---
 
 def test_put_calendar_validates_against_the_case(tiny):
-    assert _put_calendar(tiny, TINY_CALENDAR).json() == {"evaluaciones": 3}
+    body = _put_calendar(tiny, TINY_CALENDAR).json()
+    assert body["evaluaciones"] == 3 and body["formato"] == "generado" and body["desconocidas"] == []
+    assert body["ubicaciones"][0] == {"codigo": "A", "nombre": "UC A", "dia": 1, "turno": 1}
     assert (case_dir(tiny) / "calendario.csv").exists()
 
     r = _put_calendar(tiny, "Día/Turno,Turno 1\nDía 1,UC Z (Z)\n")
