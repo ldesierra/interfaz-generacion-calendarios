@@ -176,6 +176,42 @@ def test_legacy_calendar_rejects_mismatched_days_and_repeated_ucs(tiny):
     assert r.status_code == 422 and "Ninguna evaluación" in r.json()["detail"]
 
 
+def test_legacy_names_resolve_through_the_spreadsheet_aliases(real):
+    # La planilla usa abreviaturas que no se parecen al nombre del catálogo
+    # ("GAL 2", "CDIV") y varias formas del mismo nombre, todas la misma UC.
+    # caso_1s1p tiene 10 días (ids 1,3,4,6,7,8,10,11,12,13).
+    planilla = (
+        ",Semestre," + ",".join(f"Día {i}" for i in range(1, 11)) + "\n"
+        "Eléctrica,Primero,GAL 2,GAL 1,,CDIV/ CDIVV,Intro. Invest. De Operaciones,AGPI,"
+        ",,Mat disc 1,Fenómenos de Transporte\n"
+        "Civil,Primero,,,,,Intro. A la investigación de Operaciones,,,,,\n"
+    )
+    body = _put_calendar(real, planilla).json()
+    assert body["desconocidas"] == []
+    assert [(u["codigo"], u["dia"]) for u in body["ubicaciones"]] == [
+        ("1031", 1), ("1030", 3), ("1061", 6), ("1062", 6), ("1650", 7),
+        ("1944", 8), ("1023", 12), ("Q22", 13),
+    ]
+
+
+def test_derive_detects_conflicts_between_ucs_fixed_only_by_day(isolated_storage):
+    # Sin turno el modelo igual no puede separar dos UCs del mismo semestre y
+    # carrera puestas el mismo día, ni acercar un par de coincidencia alta: se
+    # avisa antes de correr un solve que no puede salir bien.
+    files = {**_TINY_CASE_FILES,
+             "trayectoria_sugerida": "unidad_curricular,semestre,carrera\nA,1,K1\nB,1,K1\nC,3,K1\n",
+             "coincidencia": "uc_1,uc_2,coincidencia\nA,C,150\n"}
+    case = _write_case(isolated_storage, "b" * 32, files)
+    _put_calendar(case, TINY_PLANILLA)
+    _put_changes(case, _alta("D", trayectoria=[{"carrera": "K1", "semestre": 3}]))
+
+    r = client.post(f"/api/cases/{case}/derive")
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "mismo día (Día 1)" in detail
+    assert "Día 1" in detail and "Día 2" in detail and "días de separación" in detail
+
+
 def test_derive_fixes_legacy_ucs_to_the_whole_day(isolated_storage):
     # Día 1 con dos turnos: una UC fijada sólo por día queda preasignada a los
     # dos, y el modelo elige el turno.

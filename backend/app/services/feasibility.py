@@ -1,11 +1,14 @@
-"""Diagnóstico de infactibilidad para casos con UCs fijas (preasignaciones
-de un único slot, como las del caso derivado de la edición incremental).
+"""Diagnóstico de infactibilidad para casos con UCs fijas (las preasignaciones
+del caso derivado de la edición incremental: un único slot cuando el calendario
+vigente trae día y turno, o todos los turnos de un día cuando viene de la
+planilla vieja, que sólo trae el día).
 
 El modelo (`solve.py`) sólo dice "Infeasible". Acá se chequean en Python, sin
 resolver nada, las restricciones que se pueden evaluar mirando slots:
 
-* a lo sumo `MAX_EVALUACIONES_TURNO` evaluaciones por turno;
-* capacidad (`sum inscriptos <= capacidad * fac_cp`);
+* a lo sumo `MAX_EVALUACIONES_TURNO` evaluaciones por turno (y, para las UCs
+  fijas sólo al día, por día entre todos sus turnos);
+* capacidad (`sum inscriptos <= capacidad * fac_cp`), por turno y por día;
 * UCs con profesores en común no pueden coincidir en el mismo turno;
 * UCs sugeridas en el mismo semestre y carrera, en días distintos;
 * si dos UCs tienen `coincidencia >= alta_co`, separación mínima de 2 en
@@ -51,14 +54,18 @@ class _Model:
         self.groups = [[str(c) for c in g] for g in data["GRUPOS_MISMO_SEMESTRE"]]
         self.pares = {frozenset((str(a), str(b))) for a, b in data["PARES_UC"]}
         self.ucs = [str(c) for c in data["C"]]
-        # Fijas: preasignación de un único slot. Con varios slots permitidos la
-        # UC no está fija, se trata como libre.
-        self.fixed = {
-            str(c): (int(slots[0][0]), int(slots[0][1]))
-            for c, slots in data["PA"].items()
-            if len(slots) == 1
+        self.turnos_por_dia = Counter(d for d, _ in self.slots)
+        self.pa = {
+            str(c): [(int(d), int(t)) for d, t in slots] for c, slots in data["PA"].items()
         }
-        self.free = [c for c in self.ucs if c not in self.fixed]
+        # Fijas a día y turno: preasignación de un único slot.
+        self.fixed = {c: s[0] for c, s in self.pa.items() if len(s) == 1}
+        # Fijas al día: toda la preasignación cae en un mismo día y el modelo
+        # elige el turno (es lo que produce la planilla vieja, que no trae
+        # turno). Incluye a las anteriores. Con días distintos permitidos la UC
+        # no está fija, se trata como libre.
+        self.fixed_day = {c: s[0][0] for c, s in self.pa.items() if len({d for d, _ in s}) == 1}
+        self.free = [c for c in self.ucs if c not in self.fixed_day]
 
     def name(self, uc: str) -> str:
         return self.desc.get(uc, uc)
@@ -72,6 +79,24 @@ class _Model:
 
     def group_mates(self, uc: str) -> set[str]:
         return {o for g in self.groups if uc in g for o in g if o != uc}
+
+    def max_separacion(self, a: str, b: str) -> float:
+        """La mayor separación en `time_value` que el modelo puede darle al par
+        eligiendo entre los slots permitidos de cada UC."""
+        return max(abs(self.tv[sa] - self.tv[sb]) for sa in self.pa[a] for sb in self.pa[b])
+
+    def muy_cerca(self, a: str, b: str) -> bool:
+        return (
+            frozenset((a, b)) in self.pares
+            and self.co.get((a, b), 0) >= self.alta_co
+            and self.max_separacion(a, b) < SEPARACION_MINIMA
+        )
+
+    def lugar(self, uc: str) -> str:
+        """Dónde quedó la UC: con turno si está fija al slot, sólo el día si el
+        modelo todavía elige el turno."""
+        slot = self.fixed.get(uc)
+        return _slot_label(slot) if slot else f"Día {self.fixed_day[uc]}"
 
 
 def _slot_label(slot) -> str:
@@ -103,20 +128,38 @@ def fixed_conflicts(m: _Model) -> list[str]:
                     f"{m.name(a)} y {m.name(b)} comparten profesor y están en el mismo turno "
                     f"({_slot_label(slot)})."
                 )
+    # Lo que sigue sólo depende del día, así que también alcanza a las UCs
+    # fijadas al día sin turno (planilla vieja).
+    por_dia: Counter[int] = Counter(m.fixed_day.values())
+    for dia, cuantas in sorted(por_dia.items()):
+        tope = MAX_EVALUACIONES_TURNO * m.turnos_por_dia[dia]
+        if cuantas > tope:
+            out.append(
+                f"Día {dia} tiene {cuantas} evaluaciones y entre sus {m.turnos_por_dia[dia]} "
+                f"turnos entran {tope}."
+            )
+        inscriptos = sum(m.ins.get(u, 0) for u, d in m.fixed_day.items() if d == dia)
+        lugares = sum(m.cp.get(s, 0) for s in m.slots if s[0] == dia) * m.fac_cp
+        if inscriptos > lugares:
+            out.append(
+                f"Día {dia} supera la capacidad: {inscriptos:g} inscriptos para {lugares:g} "
+                f"lugares entre todos sus turnos."
+            )
+
     for g in m.groups:
-        fixed_in_group = [(u, m.fixed[u]) for u in g if u in m.fixed]
-        for (a, sa), (b, sb) in combinations(fixed_in_group, 2):
-            if sa[0] == sb[0]:
+        en_grupo = [(u, m.fixed_day[u]) for u in g if u in m.fixed_day]
+        for (a, da), (b, db) in combinations(en_grupo, 2):
+            if da == db:
                 out.append(
                     f"{m.name(a)} y {m.name(b)} son del mismo semestre y carrera pero están el "
-                    f"mismo día (Día {sa[0]})."
+                    f"mismo día (Día {da})."
                 )
-    for a, b in combinations(sorted(m.fixed), 2):
-        if m.too_close(a, b, m.fixed[a], m.fixed[b]):
+    for a, b in combinations(sorted(m.fixed_day), 2):
+        if m.muy_cerca(a, b):
             out.append(
-                f"{m.name(a)} ({_slot_label(m.fixed[a])}) y {m.name(b)} ({_slot_label(m.fixed[b])}) "
-                f"tienen muchos estudiantes en común ({m.co[(a, b)]:g}) y están demasiado cerca: "
-                f"necesitan al menos {SEPARACION_MINIMA} días de separación."
+                f"{m.name(a)} ({m.lugar(a)}) y {m.name(b)} ({m.lugar(b)}) tienen muchos "
+                f"estudiantes en común ({m.co[(a, b)]:g}) y están demasiado cerca: necesitan al "
+                f"menos {SEPARACION_MINIMA} días de separación."
             )
     return out
 
