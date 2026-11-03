@@ -1,0 +1,61 @@
+,id del día en el caso,1,3,4,6,7,8,10,11,12,13
+,Semestre,Día 1,Día 2,Día 3,Día 4,Día 5,Día 6,Día 7,Día 8,Día 9,Día 10
+Ingeniería en Computación,Primero,,Programación 1,,,,Calculo Dif. Integral en una variable,Matemática Discreta 1,,,
+,Segundo,Geometria y Algebra lineal 1,Programación 2,,,Calculo dif. integral en varias variables,,,,,Fisica 1
+,Tercero,Geometria y Algebra lineal 2,,,,,,Logica,,Matemática Discreta 2,
+,Cuarto,,,,Probabilidad y Estadistica,,,,,,
+,Quinto,,,,Administracion general para ingenieros,,Teoría de Lenguajes,Sistemas Operativos,,,
+,Séptimo,,,Intro. Invest. De Operaciones,,,,,,,Intro a la Ing. de Software
+Sistemas de Comunicación,Primero,Geometria y Algebra lineal 1,,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,Programación 1,,,Calculo dif. integral en varias variables,,,,,
+,Tercero,,,Fisica 3,Probabilidad y Estadistica,,Calculo Vectorial,Matemática Discreta 1,,,
+,Quinto,,Programación 2,,,,,,,Señales y Sistemas,
+,Séptimo,Antenas y Propagación,,,,,,Sistemas Operativos,,,Redes de datos 2
+Ingeniería Civil,Primero,Geometria y Algebra lineal 1,Principios de Química General,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,,,,Calculo dif. integral en varias variables,,,,Fisica 2,
+,Tercero,,,Fisica 3,Probabilidad y Estadistica,,Calculo Vectorial,,,,Mecánica Newtoniana
+,Quinto,,Materiales y ensayos,,,,,Elasticidad,,,Elementos de Mecánica de los fluidos
+,Séptimo,Tecnología del Hormigón,,,Administracion general para ingenieros,,,,Hormigón 1,,Intro. A la Mecánica de Suelos
+,Noveno,,Estructuras de Acero,,,,,,,,
+Ingeniería Electrica,Primero,Geometria y Algebra lineal 1,,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,Programación 1,,,Calculo dif. integral en varias variables,,,,Fisica 2,
+,Tercero,,,Fisica 3,Probabilidad y Estadistica,,Calculo Vectorial,,,,Mecánica Newtoniana
+,Quinto,,,,,Funciones de Variable Compleja,,,,Señales y Sistemas,
+,Séptimo,,Medidas eléctricas,,,,,,,,Electrotécnica
+Ingeniería Industrial Mecánica,Primero,Geometria y Algebra lineal 1,,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,,Fisica 3,,Calculo dif. integral en varias variables,,,,Fisica 2,
+,Tercero,,Principios de Química General,,Probabilidad y Estadistica,,Calculo Vectorial,,,,Mecánica Newtoniana
+,Quinto,Comp Mec de Materiales 1,,,Electrotécnica 1,,,,Intro a la ciencia de materiales,,Elementos de Mecánica de los fluidos
+,Sexto,,,,,,,,,,Elementos de Mecánica de los fluidos
+,Séptimo,Transferencia de calor 2,Energía 1,,Administracion general para ingenieros,,,Máquinas para fluidos 1,,,Intro al control Industrial
+,Noveno,,,Intro. Invest. De Operaciones,,,,,,,Instrumentación Industrial
+Ingeniería en Alimentos,Primero,Geometria y Algebra lineal 1,,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,,,,Calculo dif. integral en varias variables,,,,Fisica 2,
+,Tercero,,,Fisica 3,Probabilidad y Estadistica,,Calculo Vectorial,,,,
+,Quinto,,Termodinámica aplicada,,,,,,,Fenomenos de transporte en ingenieria de procesos,
+,Sexto,,,,,,,,,,Transferencia de calor y masa 2
+,Séptimo,,Ingenieria de reacciones quimicas 1,,,,,,,,
+,Noveno,,,Gestión de Calidad,,,,,,,Ingenieria bioquimica
+Ingeniería Naval,Primero,Geometria y Algebra lineal 1,,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,,,,Calculo dif. integral en varias variables,,,,Fisica 2,
+,Tercero,,,Fisica 3,Probabilidad y Estadistica,,Calculo Vectorial,,Intro a la ciencia de materiales,,Mecánica Newtoniana
+,Quinto,Comp Mec de Materiales 1,,,Electrotécnica 1,,,,,Metalurgia de transformación,Elementos de Mecánica de los fluidos
+,Séptimo,Transferencia de calor 2,Energía 1,,,,,Máquinas para fluidos 1,,,
+,Noveno,,,Intro. Invest. De Operaciones,,,,,,,
+Ingeniería en Producción,Primero,Geometria y Algebra lineal 1,,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,Programación 1,,,Calculo dif. integral en varias variables,,,,Fisica 2,
+,Tercero,,Principios de Química General,,Probabilidad y Estadistica,,,,,,Mecánica Newtoniana
+,Cuarto,,,Fisica 3,,,,,,,
+,Quinto,Comp Mec de Materiales 1,,Intro. Invest. De Operaciones,Administracion general para ingenieros,,,,Intro a la ciencia de materiales,,
+,Sexto,,,,,,,Matemática Discreta 1,,,
+,Séptimo,Administración de Operaciones,,,Electrotécnica 1,,,,,Fenomenos de transporte en ingenieria de procesos,Elementos de Mecánica de los fluidos
+,Octavo,,,,,,,,,,Transferencia de calor y masa 2
+,Noveno,Dinámica y Control de Procesos,,,,,,,,,
+Ingeniería Química,Primero,Geometria y Algebra lineal 1,,,,,Calculo Dif. Integral en una variable,,,,Fisica 1
+,Segundo,Geometria y Algebra lineal 2,,,,Calculo dif. integral en varias variables,,,,Fisica 2,
+,Tercero,,,Fisica 3,Probabilidad y Estadistica,,Calculo Vectorial,,,,
+,Quinto,,Termodinámica aplicada,,Probabilidad y Estadistica,,,,,Fenomenos de transporte en ingenieria de procesos,
+,Sexto,,,,,,,,,,Transferencia de calor y masa 2
+,Séptimo,,Ingenieria de reacciones quimicas 1,,Electrotécnica 1,,,,,,Tecnologia y servicios industriales 1
+,Noveno,Dinámica y Control de Procesos,,,,,,,,,Ingenieria bioquimica
+Sin trayectoria sugerida,,Calidad de aguas / Energía 2 / Redes eléctricas / Imágenes médicas,,Mecánica Estructural / Diseño de procesos químicos,Patologia de las estructuras,Elementos de máquinas,Electrónica Avanzada 2,,Electrónica de potencia,,Tecnologías de redes y servicios de telecomunicaciones / Tratamiento biológico de Efluentes / Subestaciones de Media Tensión

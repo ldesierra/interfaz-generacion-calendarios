@@ -95,6 +95,41 @@ def _es_generado(rows: list[list[str]]) -> bool:
     return len(header) >= 2 and all(_TURNO_COLUMNA.match(c.strip()) for c in header[1:])
 
 
+# Abreviaturas y nombres cortos de la planilla que no se parecen al nombre de
+# la UC en `unidades_curriculares.csv`. La clave es como lo escribe la planilla
+# y el valor, el nombre del catálogo; los dos se comparan normalizados, así que
+# no importan acentos, mayúsculas ni puntuación.
+_ALIAS_PLANILLA = {
+    "GAL 1": "Geometria y Algebra lineal 1",
+    "GAL 2": "Geometria y Algebra lineal 2",
+    "CDIV": "Calculo Dif. Integral en una variable",
+    "CDIVV": "Calculo dif. integral en varias variables",
+    "AGPI": "Administracion general para ingenieros",
+    "Mat disc 1": "Matemática Discreta 1",
+    "Mat disc 2": "Matemática Discreta 2",
+    "Intro. A la investigación de Operaciones": "Intro. Invest. De Operaciones",
+    "Intro. A la invest. De Operaciones": "Intro. Invest. De Operaciones",
+    "Fenómenos de Transporte": "Fenomenos de transporte en ingenieria de procesos",
+    "Tecn y Serv Industriales 1": "Tecnologia y servicios industriales 1",
+    "Ing. reacciones químicas 1": "Ingenieria de reacciones quimicas 1",
+    "Tratamiento de Efluentes y residuos sólidos": "Tratamiento biológico de Efluentes",
+}
+
+
+_ALIAS = {normalize_name(k): normalize_name(v) for k, v in _ALIAS_PLANILLA.items()}
+
+
+def nombre_canonico(nombre: str) -> str:
+    """Nombre normalizado con el que buscar la UC en el catálogo del caso,
+    resolviendo las abreviaturas de la planilla.
+
+    Se aplica a los dos lados de la comparación (la planilla y
+    `unidades_curriculares.csv`), así que un alias sirve igual si el catálogo
+    del caso es el que trae el nombre corto."""
+    normalizado = normalize_name(nombre)
+    return _ALIAS.get(normalizado, normalizado)
+
+
 def _legacy_header(rows: list[list[str]]) -> int | None:
     """Índice de la fila de encabezado de la planilla vieja, o None.
 

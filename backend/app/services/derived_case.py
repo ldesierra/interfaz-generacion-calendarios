@@ -29,7 +29,7 @@ from backend.app.services.calendar_parser import (
     LegacyCalendar,
     Placement,
     is_legacy_calendar,
-    normalize_name,
+    nombre_canonico,
     parse_calendar_csv,
     parse_legacy_calendar_csv,
 )
@@ -119,7 +119,7 @@ def _resolve_legacy(case_id: str, legacy: LegacyCalendar) -> LoadedCalendar:
 
     por_nombre: dict[str, str] = {}
     for uc in uc_change.list_ucs(case_id):
-        por_nombre.setdefault(normalize_name(uc.nombre), uc.codigo)
+        por_nombre.setdefault(nombre_canonico(uc.nombre), uc.codigo)
 
     placements: list[Placement] = []
     ubicadas: dict[str, int] = {}
@@ -127,10 +127,10 @@ def _resolve_legacy(case_id: str, legacy: LegacyCalendar) -> LoadedCalendar:
     vistas: set[str] = set()
     for entrada in legacy.entradas:
         dia = dias[entrada.columna]
-        codigo = por_nombre.get(normalize_name(entrada.nombre))
+        codigo = por_nombre.get(nombre_canonico(entrada.nombre))
         if codigo is None:
-            if normalize_name(entrada.nombre) not in vistas:
-                vistas.add(normalize_name(entrada.nombre))
+            if nombre_canonico(entrada.nombre) not in vistas:
+                vistas.add(nombre_canonico(entrada.nombre))
                 desconocidas.append(entrada.nombre)
             continue
         if codigo in ubicadas:
