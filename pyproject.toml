@@ -9,6 +9,8 @@ package-mode = false
 [tool.poetry.dependencies]
 python = "^3.11"
 PuLP = "^2.9.0"
+# HiGHS, el solver libre: PuLP expone `pl.HiGHS` pero no lo instala.
+highspy = "^1.15.1"
 pandas = "^2.2.3"
 pyyaml = "^6.0.2"
 matplotlib = "^3.10.1"

@@ -1,0 +1,13 @@
+# Sólo entran al contexto la API, los módulos del modelo que importa y las
+# dependencias; todo lo demás es investigación, datos o el frontend (que se
+# despliega aparte, en Vercel).
+*
+!requirements.lock.txt
+!backend/
+!solve.py
+!csv_data_to_model_data.py
+!generate_schedule.py
+!constants.py
+backend/tests/
+**/__pycache__/
+**/*.pyc

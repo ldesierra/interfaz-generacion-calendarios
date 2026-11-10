@@ -36,8 +36,12 @@ export interface SchemaValidationError {
   details: ValidationIssue[];
 }
 
-export const SOLVERS = ["GUROBI_CMD", "HiGHS", "PULP_CBC_CMD"] as const;
+export const SOLVERS = ["HiGHS", "GUROBI_CMD", "PULP_CBC_CMD"] as const;
 export type Solver = (typeof SOLVERS)[number];
+
+// HiGHS es el default porque es el único que anda sin licencia: GUROBI_CMD
+// necesita las credenciales WLS cargadas en el server (ver render.yaml).
+export const DEFAULT_SOLVER: Solver = "HiGHS";
 
 // Valores del enum Weight en constants.py — alpha/beta se eligen de este set.
 export const WEIGHT_OPTIONS = [0, 0.25, 0.5, 0.75, 1] as const;

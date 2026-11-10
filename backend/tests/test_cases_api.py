@@ -65,3 +65,10 @@ def test_create_case_with_missing_file_returns_422(isolated_storage):
     assert response.status_code == 422
     body = response.json()
     assert {"file": "capacidad", "issue": "falta el archivo"} in body["details"]
+
+
+def test_health_endpoint_responds_ok():
+    """El health check del hosting (render.yaml) tiene que contestar 200 sin
+    tocar storage ni depender de ningún caso."""
+    r = TestClient(app).get("/api/health")
+    assert r.status_code == 200 and r.json() == {"status": "ok"}

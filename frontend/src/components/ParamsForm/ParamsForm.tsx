@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import {
+  DEFAULT_SOLVER,
   SOLVERS,
   TIME_LIMIT_OPTIONS,
   WEIGHT_OPTIONS,
@@ -21,7 +22,7 @@ const WARM_START_SOLVER: Solver = "GUROBI_CMD";
 const DEFAULT_PARAMS: SolveParams = {
   alpha: 0.5,
   beta: 0.5,
-  solver: SOLVERS[0],
+  solver: DEFAULT_SOLVER,
   time_limit_minutes: 180,
   nombre_corrida: "",
   warm_start: false,

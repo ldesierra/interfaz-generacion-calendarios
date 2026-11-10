@@ -16,7 +16,7 @@ describe("ParamsForm", () => {
       {
         alpha: 0.5,
         beta: 0.5,
-        solver: "GUROBI_CMD",
+        solver: "HiGHS",
         time_limit_minutes: 180,
         nombre_corrida: "caso 1",
         warm_start: false,
@@ -42,12 +42,12 @@ describe("ParamsForm", () => {
     );
   });
 
-  it("lets the user switch between the Gurobi and CBC solvers", async () => {
+  it("defaults to HiGHS and lets the user switch solvers", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(<ParamsForm onSubmit={onSubmit} />);
 
-    expect(screen.getByLabelText(/solver/i)).toHaveValue("GUROBI_CMD");
+    expect(screen.getByLabelText(/solver/i)).toHaveValue("HiGHS");
 
     await user.type(screen.getByLabelText(/nombre del caso/i), "caso-3");
     await user.selectOptions(screen.getByLabelText(/solver/i), "PULP_CBC_CMD");
@@ -105,6 +105,7 @@ describe("ParamsForm", () => {
     render(<ParamsForm onSubmit={onSubmit} />);
 
     await user.type(screen.getByLabelText(/nombre del caso/i), "caso-4");
+    await user.selectOptions(screen.getByLabelText(/solver/i), "GUROBI_CMD");
     await user.click(screen.getByLabelText(/usar warm start/i));
     await user.click(screen.getByRole("button", { name: /ejecutar modelo/i }));
 
@@ -118,6 +119,7 @@ describe("ParamsForm", () => {
     render(<ParamsForm onSubmit={onSubmit} />);
 
     await user.type(screen.getByLabelText(/nombre del caso/i), "caso-5");
+    await user.selectOptions(screen.getByLabelText(/solver/i), "GUROBI_CMD");
     await user.click(screen.getByLabelText(/usar warm start/i));
 
     const file = new File(["x_1_2_3,1"], "warm_start.csv", { type: "text/csv" });
@@ -132,12 +134,17 @@ describe("ParamsForm", () => {
     );
   });
 
-  it("disables warm start when the solver is not Gurobi", async () => {
+  it("only enables warm start while the solver is Gurobi", async () => {
     const user = userEvent.setup();
     render(<ParamsForm onSubmit={vi.fn()} />);
 
-    await user.selectOptions(screen.getByLabelText(/solver/i), "PULP_CBC_CMD");
+    // El default (HiGHS) no soporta warm start.
+    expect(screen.getByLabelText(/usar warm start/i)).toBeDisabled();
 
+    await user.selectOptions(screen.getByLabelText(/solver/i), "GUROBI_CMD");
+    expect(screen.getByLabelText(/usar warm start/i)).toBeEnabled();
+
+    await user.selectOptions(screen.getByLabelText(/solver/i), "PULP_CBC_CMD");
     expect(screen.getByLabelText(/usar warm start/i)).toBeDisabled();
   });
 });
