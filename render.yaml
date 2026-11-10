@@ -1,0 +1,33 @@
+# Blueprint del backend para Render (Dashboard → Blueprints → New Blueprint).
+# El frontend NO va acá: se despliega en Vercel (ver docs/DEPLOY.md).
+services:
+  - type: web
+    name: proyecto-grado-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # 1 CPU / 2 GB. NO bajar a `starter` (0.5 CPU / 512 MB): medido con
+    # caso_1s1p, el solver llega al techo de 512 MB a los 3 minutos y el kernel
+    # mata el contenedor entero a los ~42 (exit 137). En `standard` el mismo
+    # caso pico 1.27 GB y terminó bien. En blueprints nuevos este campo puede
+    # pedir el id nuevo (`1c-2g`).
+    plan: standard
+    healthCheckPath: /api/health
+    # Los CSVs subidos tienen que sobrevivir entre POST /api/cases y el solve,
+    # que son requests distintos: sin disco, un restart se lleva el caso.
+    disk:
+      name: cases
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: CASES_STORAGE_DIR
+        value: /data/cases
+      # En 0.5 CPU pedirle 8 threads al solver sólo genera contención.
+      - key: SOLVER_THREADS
+        value: "1"
+      # Sólo para el solver GUROBI_CMD; se cargan a mano en el dashboard.
+      - key: GRB_WLSACCESSID
+        sync: false
+      - key: GRB_WLSSECRET
+        sync: false
+      - key: GRB_LICENSEID
+        sync: false

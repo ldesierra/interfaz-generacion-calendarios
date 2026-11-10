@@ -1,0 +1,18 @@
+# Dependencias directas de runtime del servidor. El Dockerfile NO instala este
+# archivo sino `requirements.lock.txt`, que fija además las transitivas; este
+# es la lista editable a mano desde la que se regenera aquél.
+# Es un subconjunto de pyproject.toml: quedan afuera matplotlib/seaborn/pyyaml,
+# que sólo usan los scripts de investigación de la raíz, no la API.
+# Versiones fijadas a las del entorno con el que se probó el proyecto.
+fastapi==0.115.14
+uvicorn[standard]==0.34.3
+python-multipart==0.0.20
+pandas==2.2.3
+python-dotenv==1.2.3
+
+# Solvers. PuLP trae el binario de CBC adentro del wheel (linux/64), highspy es
+# HiGHS (la alternativa libre a Gurobi) y gurobipy sólo sirve si se configuran
+# las variables de licencia WLS (ver docs/DEPLOY.md).
+PuLP==2.9.0
+highspy==1.15.1
+gurobipy==13.0.3

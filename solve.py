@@ -330,7 +330,10 @@ def solve_model(
     # region SOLUCIÓN DEL PROBLEMA
     solver = None
     time_limit = time_limit_minutes * MINUTES
-    cpu_cores = os.cpu_count() or 8
+    # En un contenedor `os.cpu_count()` devuelve los cores del host, no la
+    # cuota asignada: pedirle 8 threads al solver con 0.5 CPU sólo genera
+    # contención. SOLVER_THREADS lo fija desde el entorno (ver docs/DEPLOY.md).
+    cpu_cores = int(os.environ.get("SOLVER_THREADS") or os.cpu_count() or 8)
 
     match solver_name:
         case Solver.GUROBI_CMD:
