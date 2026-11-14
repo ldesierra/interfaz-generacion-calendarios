@@ -28,6 +28,7 @@ const CATALOG = {
   ],
   carreras: [{ codigo: "civil", nombre: "Ingeniería Civil" }],
   semestres: [1, 2],
+  dias: [1, 2, 3],
 };
 
 function setup(onSubmit = vi.fn().mockResolvedValue(undefined), initial?: UcChange) {
@@ -93,6 +94,7 @@ describe("CambioForm", () => {
       previas: ["1030"],
       profesores: [],
       coincidencias: [{ uc: "1061", coincidencia: 30 }],
+      dias: [],
     } satisfies UcChange);
   });
 
@@ -158,5 +160,27 @@ describe("CambioForm", () => {
     expect(screen.getByLabelText("Inscriptos")).toHaveValue(80);
     expect(screen.getByLabelText("Semestre 1")).toHaveValue("2");
     expect(screen.getByRole("button", { name: "Quitar Geometria (1030)" })).toBeInTheDocument();
+  });
+
+  it("restringe la UC a los días marcados", async () => {
+    const onSubmit = setup();
+    await fillAlta();
+
+    await userEvent.click(screen.getByLabelText("Día 3"));
+    await userEvent.click(screen.getByLabelText("Día 1"));
+    // Se desmarca: no tiene que quedar en el cambio.
+    await userEvent.click(screen.getByLabelText("Día 3"));
+
+    await userEvent.click(screen.getByRole("button", { name: "Guardar cambio" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].dias).toEqual([1]);
+  });
+
+  it("sin días marcados manda la lista vacía y la UC queda libre", async () => {
+    const onSubmit = setup();
+    await fillAlta();
+    await userEvent.click(screen.getByRole("button", { name: "Guardar cambio" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].dias).toEqual([]);
   });
 });

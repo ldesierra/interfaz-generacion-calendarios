@@ -45,6 +45,13 @@ def list_ucs(case_id: str) -> list[UcSummary]:
     return [UcSummary(codigo=r["codigo"], nombre=r[col]) for _, r in df.iterrows()]
 
 
+def dias_con_turnos(case_id: str) -> list[int]:
+    """Días del caso que tienen al menos un turno habilitado."""
+    turnos_dias = _read(case_id, "turnos_dias")
+    con_turno = {int(float(v)) for v in turnos_dias["id_dia"]}
+    return [int(float(v)) for v in _read(case_id, "dias")["id"] if int(float(v)) in con_turno]
+
+
 def get_catalog(case_id: str) -> Catalog:
     carreras = _read(case_id, "carreras")
     semestres = _read(case_id, "semestres")
@@ -52,6 +59,7 @@ def get_catalog(case_id: str) -> Catalog:
         ucs=list_ucs(case_id),
         carreras=[Carrera(codigo=r["codigo"], nombre=r["nombre"]) for _, r in carreras.iterrows()],
         semestres=sorted(int(float(v)) for v in semestres["id"]),
+        dias=dias_con_turnos(case_id),
     )
 
 
@@ -159,6 +167,7 @@ def validate_changes(case_id: str, changes: list[UcChange]) -> list[ChangeIssue]
     known = _known_codes(case_id) | {c.codigo for c in changes if c.tipo == "alta"}
     carreras = set(_read(case_id, "carreras")["codigo"])
     semestres = {int(float(s)) for s in _read(case_id, "semestres")["id"]}
+    dias = set(dias_con_turnos(case_id))
 
     seen: set[str] = set()
     for index, change in enumerate(changes):
@@ -202,6 +211,12 @@ def validate_changes(case_id: str, changes: list[UcChange]) -> list[ChangeIssue]
         check_refs("previas", change.previas)
         check_refs("profesores", change.profesores)
         check_refs("coincidencias", [c.uc for c in change.coincidencias])
+
+        for dia in change.dias:
+            if dia not in dias:
+                add("dias", f"el día '{dia}' no existe en el caso o no tiene turnos")
+        if len(set(change.dias)) != len(change.dias):
+            add("dias", "hay días repetidos")
     return issues
 
 

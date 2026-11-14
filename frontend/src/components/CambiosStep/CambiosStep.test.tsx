@@ -18,6 +18,7 @@ const CATALOG = {
   ],
   carreras: [{ codigo: "civil", nombre: "Ingeniería Civil" }],
   semestres: [1, 2],
+  dias: [1, 2, 3],
 };
 
 const ALTA: UcChange = {

@@ -9,7 +9,9 @@ de siempre— en el que:
   (`preasignaciones.csv` con una única fila por UC; en el modelo una
   preasignación es el conjunto de slots permitidos, ver `solve.py`);
 * las UCs afectadas por un cambio (altas y modificadas) quedan **libres**:
-  sin preasignación, el modelo busca su mejor lugar;
+  sin preasignación, el modelo busca su mejor lugar — salvo que el cambio
+  traiga días elegidos, en cuyo caso se le preasignan todos los turnos de
+  esos días y el modelo la ubica dentro de ellos;
 * los datos de cada UC afectada (trayectoria, previas, profesores,
   inscriptos, coincidencia) se reemplazan por el estado final del cambio.
 """
@@ -254,13 +256,22 @@ def build_derived_case(case_id: str) -> DerivedCase:
     # ese día, así que la UC queda fija al día y el modelo elige el turno.
     por_dia = _turnos_por_dia(case_id)
     fixed = [p for p in placements if p.codigo not in affected]
+    preasignaciones = [
+        {"unidad_curricular": p.codigo, "dia": str(p.dia), "turno": str(turno)}
+        for p in fixed
+        for turno in ([p.turno] if p.turno is not None else por_dia[p.dia])
+    ]
+    # Un cambio con días elegidos no queda libre del todo: se le preasignan
+    # todos los turnos de esos días, así el modelo lo ubica ahí adentro.
+    restringidas = [c for c in changes if c.dias]
+    preasignaciones += [
+        {"unidad_curricular": c.codigo, "dia": str(dia), "turno": str(turno)}
+        for c in restringidas
+        for dia in c.dias
+        for turno in por_dia[dia]
+    ]
     files["preasignaciones"] = pd.DataFrame(
-        [
-            {"unidad_curricular": p.codigo, "dia": str(p.dia), "turno": str(turno)}
-            for p in fixed
-            for turno in ([p.turno] if p.turno is not None else por_dia[p.dia])
-        ],
-        columns=["unidad_curricular", "dia", "turno"],
+        preasignaciones, columns=["unidad_curricular", "dia", "turno"]
     )
 
     warnings: list[str] = []
