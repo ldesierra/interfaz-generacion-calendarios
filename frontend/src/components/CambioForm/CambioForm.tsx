@@ -10,6 +10,7 @@ import {
 import type { Catalog, UcChange } from "../../api/types";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { UcPicker } from "./UcPicker";
@@ -54,6 +55,7 @@ export function CambioForm({ caseId, codigosEnCalendario, initial, index, onSubm
       ? initial.trayectoria.map((t) => ({ carrera: t.carrera, semestre: String(t.semestre) }))
       : [{ carrera: "", semestre: "" }],
   );
+  const [dias, setDias] = useState<number[]>(initial?.dias ?? []);
   const [previas, setPrevias] = useState<string[]>(initial?.previas ?? []);
   const [profesores, setProfesores] = useState<string[]>(initial?.profesores ?? []);
   const [coincidencias, setCoincidencias] = useState<CoincidenciaRow[]>(
@@ -199,6 +201,7 @@ export function CambioForm({ caseId, codigosEnCalendario, initial, index, onSubm
         previas,
         profesores,
         coincidencias: coincidencias.map((c) => ({ uc: c.uc, coincidencia: Number(c.valor) })),
+        dias: [...dias].sort((a, b) => a - b),
       });
     } catch (err) {
       if (err instanceof ChangeValidationApiError) {
@@ -327,6 +330,30 @@ export function CambioForm({ caseId, codigosEnCalendario, initial, index, onSubm
           />
         </label>
         {fieldError("inscriptos")}
+      </div>
+
+      <div className={section}>
+        <span className="font-medium">Días posibles</span>
+        <p className="text-xs text-muted-foreground">
+          Sin elegir ninguno, el modelo ubica la UC donde le convenga. Si elegís días, la
+          evaluación va a quedar en uno de ellos y el modelo elige el turno.
+        </p>
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          {(catalog?.dias ?? []).map((dia) => (
+            <label key={dia} className="flex items-center gap-1.5">
+              <Checkbox
+                checked={dias.includes(dia)}
+                onChange={(e) => {
+                  const marcado = e.target.checked;
+                  setDias((prev) => (marcado ? [...prev, dia] : prev.filter((d) => d !== dia)));
+                  clearError("dias");
+                }}
+              />
+              <span>Día {dia}</span>
+            </label>
+          ))}
+        </div>
+        {fieldError("dias")}
       </div>
 
       <div className={section}>

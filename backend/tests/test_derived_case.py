@@ -395,3 +395,54 @@ def test_diagnose_flags_capacity_and_close_pairs(isolated_storage):
     text = "\n".join(messages)
     assert "supera la capacidad" in text
     assert "demasiado cerca" in text
+
+
+def test_derive_restricts_a_changed_uc_to_the_chosen_days(isolated_storage):
+    # Elegir días no deja la UC libre: se le preasignan todos los turnos de
+    # esos días, así el modelo la ubica ahí adentro y no en cualquier lado.
+    files = {**_TINY_CASE_FILES,
+             "turnos": "id\n1\n2\n",
+             "turnos_dias": "id_dia,id_turno\n1,1\n1,2\n2,1\n2,2\n",
+             "capacidad": "id_dia,id_turno,capacidad\n1,1,100\n1,2,100\n2,1,100\n2,2,100\n"}
+    case = _write_case(isolated_storage, "b" * 32, files)
+    _put_calendar(case, TINY_CALENDAR)
+    _put_changes(case, _alta("D", dias=[2]))
+
+    body = client.post(f"/api/cases/{case}/derive").json()
+    pa = {(r["unidad_curricular"], r["dia"], r["turno"]) for r in _rows(body["derived_case_id"], "preasignaciones")}
+    # Las 3 del calendario siguen clavadas a su slot...
+    assert {("A", "1", "1"), ("B", "1", "1"), ("C", "2", "1")} <= pa
+    # ...y la nueva queda con los dos turnos del Día 2 y ninguno del Día 1.
+    assert {s for s in pa if s[0] == "D"} == {("D", "2", "1"), ("D", "2", "2")}
+
+
+def test_derive_without_chosen_days_leaves_the_uc_free(isolated_storage):
+    # El default no cambia: sin días, la UC afectada no aparece en preasignaciones.
+    case = _write_case(isolated_storage, "b" * 32, _TINY_CASE_FILES)
+    _put_calendar(case, TINY_CALENDAR)
+    _put_changes(case, _alta("D"))
+
+    body = client.post(f"/api/cases/{case}/derive").json()
+    pa = _rows(body["derived_case_id"], "preasignaciones")
+    assert all(r["unidad_curricular"] != "D" for r in pa)
+
+
+def test_changes_reject_days_outside_the_case(tiny):
+    r = client.put(f"/api/cases/{tiny}/changes", json={"changes": [_alta("D", dias=[9])]})
+    assert r.status_code == 422
+    assert {"index": 0, "field": "dias", "issue": "el día '9' no existe en el caso o no tiene turnos"} in (
+        r.json()["details"]
+    )
+
+    r = client.put(f"/api/cases/{tiny}/changes", json={"changes": [_alta("D", dias=[1, 1])]})
+    assert r.status_code == 422
+    assert any(d["issue"] == "hay días repetidos" for d in r.json()["details"])
+
+
+def test_catalog_lists_the_days_that_have_turns(isolated_storage):
+    # El form necesita los días para ofrecerlos; un día sin turnos no sirve.
+    files = {**_TINY_CASE_FILES,
+             "dias": "id\n1\n2\n5\n",
+             "turnos_dias": "id_dia,id_turno\n1,1\n2,1\n"}
+    case = _write_case(isolated_storage, "c" * 32, files)
+    assert client.get(f"/api/cases/{case}/catalog").json()["dias"] == [1, 2]

@@ -122,6 +122,8 @@ export interface Catalog {
   ucs: UcSummary[];
   carreras: { codigo: string; nombre: string }[];
   semestres: number[];
+  // Días del caso con al menos un turno habilitado.
+  dias: number[];
 }
 
 export interface UcDetail extends UcSummary {
@@ -142,6 +144,9 @@ export interface UcChange {
   previas: string[];
   profesores: string[];
   coincidencias: CoincidenciaItem[];
+  // Días a los que se restringe la UC. Vacío o ausente = el modelo la ubica
+  // donde quiera; con días, elige turno dentro de esos días.
+  dias?: number[];
 }
 
 export interface ChangeIssue {
