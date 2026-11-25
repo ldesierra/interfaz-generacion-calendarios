@@ -44,6 +44,7 @@ describe("ModificacionPage", () => {
       ucs: [{ codigo: "1061", nombre: "Calculo" }],
       carreras: [{ codigo: "civil", nombre: "Civil" }],
       semestres: [1],
+      dias: [1, 2],
     });
   });
   afterEach(() => vi.resetAllMocks());

@@ -29,6 +29,10 @@ class UcChange(BaseModel):
     previas: list[str] = []  # UCs requeridas
     profesores: list[str] = []  # UCs que comparten profesor
     coincidencias: list[Coincidencia] = []
+    # Días a los que se restringe la UC. Vacío = el modelo la ubica donde
+    # quiera. Con días, queda libre el turno dentro de esos días (igual que
+    # una UC que viene de la planilla vieja).
+    dias: list[int] = []
 
     @field_validator("codigo", "nombre")
     @classmethod
@@ -50,6 +54,9 @@ class Catalog(BaseModel):
     ucs: list[UcSummary]
     carreras: list[Carrera]
     semestres: list[int]
+    # Días del caso que tienen al menos un turno habilitado: son los únicos
+    # a los que tiene sentido restringir una UC.
+    dias: list[int] = []
 
 
 class UcDetail(UcSummary):
