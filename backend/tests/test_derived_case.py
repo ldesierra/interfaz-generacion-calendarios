@@ -260,7 +260,7 @@ def test_derive_requires_calendar_and_changes(tiny):
 def test_derive_fixes_unchanged_ucs_and_frees_changed_ones(real, monkeypatch):
     # El calendario sintético (round-robin) no respeta las restricciones del
     # caso; acá sólo interesa qué se escribe, no la factibilidad (ver más abajo).
-    monkeypatch.setattr(feasibility, "fixed_conflict_report", lambda path: [])
+    monkeypatch.setattr(feasibility, "fixed_conflict_report", lambda path, tolerar=False: [])
     _put_calendar(real, _real_calendar(real))
     detail = client.get(f"/api/cases/{real}/ucs/1061").json()
     modif = {**detail, "tipo": "modificacion", "inscriptos": 999, "previas": [], "profesores": [],

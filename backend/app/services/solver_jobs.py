@@ -19,7 +19,7 @@ from typing import Optional
 from backend.app.core.config import STORAGE_DIR
 from backend.app.schemas.job import JobStatusName
 from backend.app.services import feasibility
-from backend.app.services.case_storage import warm_start_path
+from backend.app.services.case_storage import tolera_conflictos, warm_start_path
 from solve import solve_model
 
 # Al llegar al time_limit_minutes, el solver puede terminar en varios
@@ -130,9 +130,19 @@ def _run_job(
 
     case_dir = STORAGE_DIR / job.case_id
     warm_start_sol = str(warm_start_path(job.case_id)) if warm_start else None
+    # Caso derivado armado con la aplicación menos restrictiva: el modelo tiene
+    # que tolerar lo que sus preasignaciones ya incumplen entre sí, o sería
+    # infactible (ver derived_case.build_derived_case).
+    relax_fixed = tolera_conflictos(job.case_id)
     try:
         value, execution_time, status, variables, uc_descriptions, solution_status = solve_model(
-            case_dir, solver, alpha, beta, time_limit_minutes, warm_start_sol=warm_start_sol
+            case_dir,
+            solver,
+            alpha,
+            beta,
+            time_limit_minutes,
+            warm_start_sol=warm_start_sol,
+            relax_fixed=relax_fixed,
         )
     except Exception as exc:
         job.error_message = str(exc)
@@ -154,7 +164,9 @@ def _run_job(
         if new_status == "infeasible":
             # Antes de exponer el status final, igual que `result` más abajo.
             try:
-                job.infeasibility_reasons = feasibility.diagnose(case_dir)
+                job.infeasibility_reasons = feasibility.diagnose(
+                    case_dir, tolerar=relax_fixed
+                )
             except Exception:
                 job.infeasibility_reasons = []
         job.message = message

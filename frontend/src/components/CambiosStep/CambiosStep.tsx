@@ -5,6 +5,7 @@ import type { UcChange } from "../../api/types";
 import { CambioForm } from "../CambioForm/CambioForm";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Modal } from "../ui/modal";
 
 interface CambiosStepProps {
@@ -12,7 +13,9 @@ interface CambiosStepProps {
   codigosEnCalendario: Set<string>;
   changes: UcChange[];
   onChange: (changes: UcChange[]) => void;
-  onContinue: () => void;
+  // `tolerarConflictos`: armar el caso derivado aunque el calendario vigente ya
+  // incumpla restricciones que el modelo sabe tolerar.
+  onContinue: (tolerarConflictos: boolean) => void;
   // true mientras el padre prepara el paso siguiente (deshabilita Continuar).
   continuing?: boolean;
 }
@@ -23,6 +26,7 @@ type Editing = { index: number | null };
 export function CambiosStep({ caseId, codigosEnCalendario, changes, onChange, onContinue, continuing = false }: CambiosStepProps) {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  const [tolerar, setTolerar] = useState(false);
 
   // Cada alta/edición/baja se manda como la lista completa: el backend
   // valida el conjunto (referencias entre cambios, UCs repetidas) y la guarda.
@@ -105,8 +109,29 @@ export function CambiosStep({ caseId, codigosEnCalendario, changes, onChange, on
         </Button>
       </div>
 
+      <div className="flex flex-col gap-1 rounded-md border border-border px-3 py-2">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <Checkbox
+            checked={tolerar}
+            onChange={(e) => setTolerar(e.target.checked)}
+          />
+          Aplicación menos restrictiva
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Si el calendario vigente ya incumple alguna restricción del modelo (dos UCs del
+          mismo semestre y carrera el mismo día, o dos con muchos estudiantes en común
+          demasiado cerca), normalmente no se puede seguir. Marcando esto se aplican los
+          cambios igual: el calendario nuevo mantiene lo que ya venía mal, pero las
+          evaluaciones que ubique el modelo no agregan incumplimientos nuevos.
+        </p>
+      </div>
+
       <div className="mb-6 flex justify-end">
-        <Button type="button" disabled={changes.length === 0 || continuing} onClick={onContinue}>
+        <Button
+          type="button"
+          disabled={changes.length === 0 || continuing}
+          onClick={() => onContinue(tolerar)}
+        >
           {continuing ? "Preparando..." : "Continuar"}
         </Button>
       </div>

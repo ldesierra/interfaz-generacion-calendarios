@@ -92,7 +92,7 @@ describe("ModificacionPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Guardar cambio" }));
     await userEvent.click(await screen.findByRole("button", { name: "Continuar" }));
 
-    expect(deriveCase).toHaveBeenCalledWith("case1");
+    expect(deriveCase).toHaveBeenCalledWith("case1", false);
     expect(await screen.findByTestId("resumen-derivado")).toHaveTextContent(
       "64 evaluaciones quedan fijas; el modelo ubica 2 UCs (1061, 9999).",
     );

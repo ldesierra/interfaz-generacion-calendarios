@@ -14,6 +14,12 @@ de siempre— en el que:
   esos días y el modelo la ubica dentro de ellos;
 * los datos de cada UC afectada (trayectoria, previas, profesores,
   inscriptos, coincidencia) se reemplazan por el estado final del cambio.
+
+Si el calendario vigente ya incumple restricciones del modelo, el caso derivado
+no se arma: ningún cambio lo puede arreglar. Con `tolerar_conflictos` (la
+"aplicación menos restrictiva") las violaciones que el modelo sabe tolerar
+dejan de frenarlo — ver `feasibility.TOLERABLES` y
+`solve.solve_model(relax_fixed=True)`.
 """
 
 import json
@@ -35,7 +41,7 @@ from backend.app.services.calendar_parser import (
     parse_calendar_csv,
     parse_legacy_calendar_csv,
 )
-from backend.app.services.case_storage import case_dir
+from backend.app.services.case_storage import case_dir, tolerancia_path
 from backend.app.services.case_validation import REQUIRED_FILES
 
 CALENDAR_FILENAME = "calendario.csv"
@@ -62,6 +68,9 @@ class DerivedCase:
     fixed_ucs: int
     free_ucs: list[str]
     warnings: list[str] = field(default_factory=list)
+    # Violaciones del calendario vigente que se toleraron (vacío sin
+    # `tolerar_conflictos`). El calendario que salga las va a mantener.
+    toleradas: list[str] = field(default_factory=list)
 
 
 def _read(case_id: str, name: str) -> pd.DataFrame:
@@ -182,7 +191,7 @@ def _append(df: pd.DataFrame, rows: list[dict]) -> pd.DataFrame:
     return pd.concat([df, pd.DataFrame(rows, columns=df.columns).fillna("")], ignore_index=True)
 
 
-def build_derived_case(case_id: str) -> DerivedCase:
+def build_derived_case(case_id: str, tolerar_conflictos: bool = False) -> DerivedCase:
     base = case_dir(case_id)
     if not (base / CALENDAR_FILENAME).is_file():
         raise DerivedCaseError("Falta cargar el calendario vigente.")
@@ -300,20 +309,47 @@ def build_derived_case(case_id: str) -> DerivedCase:
 
     # Si lo que queda fijo ya se incumple entre sí, el modelo va a ser
     # infactible hagan lo que hagan los cambios: se avisa ahora, sin correr
-    # (y esperar) un solve que no puede salir bien.
+    # (y esperar) un solve que no puede salir bien. Con `tolerar_conflictos`
+    # las violaciones que el modelo sabe tolerar no frenan nada; las otras sí,
+    # porque el caso seguiría siendo infactible.
     try:
-        report = feasibility.fixed_conflict_report(out)
+        report = feasibility.fixed_conflict_report(out, tolerar=tolerar_conflictos)
+        toleradas = feasibility.tolerable_conflicts(out) if tolerar_conflictos else []
+        # Si lo único que incumple es tolerable, la opción le sirve al usuario:
+        # se calcula antes de borrar el caso, que es de donde se lee.
+        sugerir_tolerancia = bool(report) and not tolerar_conflictos and not (
+            feasibility.fixed_conflict_report(out, tolerar=True)
+        )
     except Exception:
-        report = []
+        report, toleradas, sugerir_tolerancia = [], [], False
     if report:
         shutil.rmtree(out)
+        if sugerir_tolerancia:
+            report.append(
+                "Podés aplicar los cambios igual marcando «Aplicación menos restrictiva»: el "
+                "modelo tolera lo que el calendario vigente ya incumple, pero no deja que las "
+                "evaluaciones que ubica agreguen incumplimientos nuevos."
+            )
         raise DerivedCaseError("\n- ".join([report[0], *report[1:]]))
+
+    if toleradas:
+        # La marca es lo que hace que el solve de este caso corra relajado.
+        tolerancia_path(derived_id).write_text(
+            json.dumps({"conflictos": toleradas}, ensure_ascii=False), encoding="utf-8"
+        )
+        warnings.append(
+            "Aplicación menos restrictiva: el calendario vigente ya incumple estas "
+            "restricciones y el calendario nuevo las va a mantener (las evaluaciones que "
+            "ubique el modelo no agregan incumplimientos nuevos) — "
+            + "; ".join(toleradas)
+        )
 
     return DerivedCase(
         case_id=derived_id,
         fixed_ucs=len(fixed),
         free_ucs=sorted(affected),
         warnings=warnings,
+        toleradas=toleradas,
     )
 
 

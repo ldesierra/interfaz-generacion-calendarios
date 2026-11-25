@@ -204,11 +204,22 @@ export interface DerivedCase {
   fixed_ucs: number;
   free_ucs: string[];
   warnings: string[];
+  // Restricciones que el calendario vigente ya incumplía y se toleraron.
+  toleradas: string[];
 }
 
 // Arma el caso derivado (calendario vigente + cambios); se resuelve con solveCase().
-export async function deriveCase(caseId: string): Promise<DerivedCase> {
-  const response = await fetch(`/api/cases/${caseId}/derive`, { method: "POST" });
+// Con `tolerarConflictos` el caso se arma aunque el calendario vigente ya incumpla
+// restricciones que el modelo sabe tolerar, en vez de rechazarlo.
+export async function deriveCase(
+  caseId: string,
+  tolerarConflictos = false,
+): Promise<DerivedCase> {
+  const response = await fetch(`/api/cases/${caseId}/derive`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tolerar_conflictos: tolerarConflictos }),
+  });
   if (response.status !== 201) {
     throw new ApiError(await parseJsonError(response), response.status);
   }
