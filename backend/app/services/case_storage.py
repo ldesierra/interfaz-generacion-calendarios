@@ -26,6 +26,22 @@ def case_dir(case_id: str):
     return STORAGE_DIR / case_id
 
 
+# Marca que el caso derivado se armó con la aplicación menos restrictiva (ver
+# `derived_case.build_derived_case`): guarda las violaciones que el calendario
+# vigente ya traía y que se decidió tolerar. Su presencia es lo que hace que el
+# solve del caso corra con `solve_model(relax_fixed=True)`, así que sobrevive a
+# cualquier cantidad de corridas del mismo caso derivado.
+TOLERANCIA_FILENAME = "tolerancia.json"
+
+
+def tolerancia_path(case_id: str):
+    return case_dir(case_id) / TOLERANCIA_FILENAME
+
+
+def tolera_conflictos(case_id: str) -> bool:
+    return tolerancia_path(case_id).is_file()
+
+
 WARM_START_FILENAME = "warm_start.csv"
 
 

@@ -126,7 +126,9 @@ def test_solve_accepts_gurobi_solver_and_passes_it_through(small_case, monkeypat
 
     captured_solver = {}
 
-    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None):
+    def _fake_solve_model(
+        source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None, relax_fixed=False
+    ):
         captured_solver["value"] = solver_name
         return (1.0, 0.01, "Optimal", [], {}, "Optimal Solution Found")
 
@@ -148,7 +150,9 @@ def test_solve_accepts_highs_solver_and_passes_it_through(small_case, monkeypatc
 
     captured_solver = {}
 
-    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None):
+    def _fake_solve_model(
+        source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None, relax_fixed=False
+    ):
         captured_solver["value"] = solver_name
         return (1.0, 0.01, "Optimal", [], {}, "Optimal Solution Found")
 
@@ -396,7 +400,9 @@ def test_solve_with_malformed_warm_start_file_reports_a_clear_error(small_case):
 
 
 def _fake_solve_model_factory(status, solution_status, value=None, variables=None, uc_descriptions=None):
-    def _fake_solve_model(source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None):
+    def _fake_solve_model(
+        source, solver_name, alpha, beta, time_limit_minutes, warm_start_sol=None, relax_fixed=False
+    ):
         return (value, 0.01, status, variables or [], uc_descriptions or {}, solution_status)
 
     return _fake_solve_model

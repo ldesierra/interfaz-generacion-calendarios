@@ -105,12 +105,12 @@ export function ModificacionPage() {
     }
   }
 
-  async function handleDerive() {
+  async function handleDerive(tolerarConflictos: boolean) {
     if (!caseId) return;
     setBusy(true);
     setError(null);
     try {
-      setDerived(await deriveCase(caseId));
+      setDerived(await deriveCase(caseId, tolerarConflictos));
       setStep("params");
     } catch (err) {
       setError(errorMessage(err, "No se pudo preparar el caso."));

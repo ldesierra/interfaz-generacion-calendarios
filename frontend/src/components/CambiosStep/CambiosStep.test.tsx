@@ -32,7 +32,13 @@ const ALTA: UcChange = {
   coincidencias: [],
 };
 
-function Harness({ initial = [], onContinue = vi.fn() }: { initial?: UcChange[]; onContinue?: () => void }) {
+function Harness({
+  initial = [],
+  onContinue = vi.fn(),
+}: {
+  initial?: UcChange[];
+  onContinue?: (tolerarConflictos: boolean) => void;
+}) {
   const [changes, setChanges] = useState(initial);
   return (
     <CambiosStep
@@ -111,10 +117,18 @@ describe("CambiosStep", () => {
     expect(screen.getByText("Todavía no agregaste ningún cambio.")).toBeInTheDocument();
   });
 
-  it("Continuar avisa a la página", async () => {
+  it("Continuar avisa a la página, sin tolerar nada por defecto", async () => {
     const onContinue = vi.fn();
     render(<Harness initial={[ALTA]} onContinue={onContinue} />);
     await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
-    expect(onContinue).toHaveBeenCalled();
+    expect(onContinue).toHaveBeenCalledWith(false);
+  });
+
+  it("con la aplicación menos restrictiva marcada, Continuar lo avisa", async () => {
+    const onContinue = vi.fn();
+    render(<Harness initial={[ALTA]} onContinue={onContinue} />);
+    await userEvent.click(screen.getByLabelText("Aplicación menos restrictiva"));
+    await userEvent.click(screen.getByRole("button", { name: "Continuar" }));
+    expect(onContinue).toHaveBeenCalledWith(true);
   });
 });

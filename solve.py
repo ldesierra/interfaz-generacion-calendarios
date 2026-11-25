@@ -10,6 +10,11 @@ from constants import Solver, MINUTES
 
 load_dotenv()
 
+# Separación mínima (en unidades de time_value) que tiene que haber entre dos
+# UCs con mucha coincidencia de estudiantes. Mismo valor en
+# `backend/app/services/feasibility.py`.
+SEPARACION_MINIMA = 2
+
 
 def _cop_conflict_groups(cop_pairs):
     """
@@ -107,6 +112,7 @@ def solve_model(
     beta: float,
     time_limit_minutes=15,
     warm_start_sol=None,
+    relax_fixed=False,
 ) -> tuple[float, float, str, list, dict, str]:
     """
     Args:
@@ -124,6 +130,14 @@ def solve_model(
             el modelo actual se ignoran, así que una semilla vieja (con
             variables w/z/y de la formulación anterior) sigue sirviendo: de
             ella sólo se aprovechan las x, que son las que importan.
+        relax_fixed: afloja las restricciones que las preasignaciones ya
+            incumplen entre sí, hasta el nivel que ellas fuerzan y nada
+            más (ver la región de restricciones). Es para la edición
+            incremental, cuando el calendario vigente que se carga viene
+            violando alguna regla del modelo: así los cambios se pueden
+            ubicar igual, pero ninguna UC que el modelo ubique puede
+            agregar un incumplimiento nuevo. Con preasignaciones
+            consistentes entre sí no cambia ninguna restricción.
 
     Returns:
         (valor_objetivo, tiempo_ejecucion_seg, status, variables, uc_descriptions, solution_status)
@@ -198,6 +212,22 @@ def solve_model(
 
     # region DEFINICIÓN DE LAS RESTRICCIONES
 
+    slots = [(d, t) for d in D for t in Td[d]]
+
+    # Slots permitidos de cada UC: su preasignación, o todos si no tiene
+    # (una preasignación es justamente el conjunto de slots permitidos, ver
+    # PreAsignacion_ más abajo).
+    permitidos = {c: PA.get(c, slots) for c in C}
+    # Día al que la preasignación obliga a la UC, cuando todos sus slots
+    # permitidos caen en un mismo día (es lo que produce la planilla vieja,
+    # que sólo trae el día). Una UC libre, o preasignada a varios días, no
+    # tiene día forzado: lo elige el modelo.
+    dia_forzado = {}
+    for c, slots_c in permitidos.items():
+        dias_c = {d for d, _ in slots_c}
+        if len(dias_c) == 1:
+            dia_forzado[c] = dias_c.pop()
+
     # Los cursos que tengan profesores coincidentes no pueden ser asignados el mismo turno
     cop_clique_groups, cop_leftover_pairs = _cop_conflict_groups(COP)
 
@@ -233,8 +263,16 @@ def solve_model(
     # se asignan a días distintos (a lo sumo una del grupo por día)
     for d in D:
         for idx, group in enumerate(GRUPOS_MISMO_SEMESTRE):
+            # Con relax_fixed el tope sube a la cantidad de UCs del grupo que
+            # las preasignaciones ya obligan a estar este día: se tolera el
+            # incumplimiento que trae el calendario vigente, pero las UCs que
+            # el modelo ubica no pueden sumar uno nuevo, porque las forzadas ya
+            # agotan el tope. Sin preasignaciones forzadas el tope sigue en 1.
+            tope = 1
+            if relax_fixed:
+                tope = max(1, sum(dia_forzado.get(c) == d for c in group))
             problem += (
-                pl.lpSum(x[c, d, t] for c in group for t in Td[d]) <= 1,
+                pl.lpSum(x[c, d, t] for c in group for t in Td[d]) <= tope,
                 f"Dias_Distintos_Grupo_{idx}_Dia_{d}",
             )
 
@@ -271,11 +309,29 @@ def solve_model(
     # justamente lo que obligaba a que w fuera binaria).
     max_co = max(co[c1, c2] for c1, c2 in co if c1 != c2) + 1
 
-    slots = [(d, t) for d in D for t in Td[d]]
     dist = {
         (s1, s2): abs(time_value[s1] - time_value[s2]) for s1 in slots for s2 in slots
     }
-    slots_cercanos = {s1: [s2 for s2 in slots if dist[s1, s2] < 2] for s1 in slots}
+    slots_cercanos = {
+        s1: [s2 for s2 in slots if dist[s1, s2] < SEPARACION_MINIMA] for s1 in slots
+    }
+
+    def _separacion_forzada(c1: str, c2: str) -> bool:
+        """True si las preasignaciones no le dejan al par ninguna forma de
+        cumplir la separación mínima, y relax_fixed permite tolerarlo.
+
+        La familia Separacion_Minima del par es insatisfacible en ese caso (las
+        dos UCs están preasignadas y cualquier combinación de slots permitidos
+        queda demasiado cerca), así que no emitirla es lo mismo que emitir sólo
+        las filas que sí se pueden cumplir. Con una de las dos libre, la mejor
+        separación se calcula sobre todos los slots y la restricción sigue en
+        pie: a una UC que el modelo ubica nunca se la deja demasiado cerca."""
+        if not relax_fixed:
+            return False
+        return (
+            max(dist[s1, s2] for s1 in permitidos[c1] for s2 in permitidos[c2])
+            < SEPARACION_MINIMA
+        )
 
     # Cuántas veces aparece cada par en P: el término de previas se suma una
     # vez por aparición, igual que en la versión anterior del objetivo.
@@ -317,7 +373,7 @@ def solve_model(
         # través de toda la cadena big-M; escrito directo sobre x es una
         # familia tipo clique que el solver sí propaga mientras busca una
         # solución factible.
-        if co[c1, c2] >= alta_co:
+        if co[c1, c2] >= alta_co and not _separacion_forzada(c1, c2):
             for s1 in slots:
                 problem += (
                     x[(c1,) + s1]

@@ -19,6 +19,10 @@ Con eso se separan dos situaciones muy distintas para el usuario:
 1. el calendario vigente (lo fijo) ya viola alguna restricción → ningún cambio
    lo arregla, hay que corregir los datos o el calendario;
 2. lo fijo es consistente pero a alguna UC libre no le queda ningún slot.
+
+Cada violación entre las UCs fijas se devuelve con su tipo, porque el modelo
+sabe tolerar algunas (ver `TOLERABLES` y `solve.solve_model(relax_fixed=True)`):
+con la aplicación menos restrictiva esas no bloquean el caso derivado.
 """
 
 from __future__ import annotations
@@ -35,6 +39,14 @@ MAX_EVALUACIONES_TURNO = 6
 SEPARACION_MINIMA = 2
 
 MAX_LISTED = 8
+
+# Tipos de violación entre UCs fijas que `solve.solve_model(relax_fixed=True)`
+# sabe tolerar: afloja esas dos restricciones hasta el nivel que las
+# preasignaciones ya fuerzan, así que el modelo igual encuentra un calendario y
+# ninguna UC que ubique agrega un incumplimiento nuevo. El resto (turnos
+# llenos, capacidad, profesores compartidos) no se puede tolerar: el modelo
+# sería infactible de todas formas.
+TOLERABLES = frozenset({"semestre", "cercania"})
 
 
 class _Model:
@@ -103,64 +115,74 @@ def _slot_label(slot) -> str:
     return f"Día {slot[0]} Turno {slot[1]}"
 
 
-def fixed_conflicts(m: _Model) -> list[str]:
-    """Violaciones entre las UCs fijas (no dependen de ninguna UC libre)."""
+def fixed_conflicts(m: _Model) -> list[tuple[str, str]]:
+    """Violaciones entre las UCs fijas (no dependen de ninguna UC libre), cada
+    una como `(tipo, mensaje)`. Los tipos de `TOLERABLES` son los que el modelo
+    sabe tolerar."""
     by_slot: dict[tuple[int, int], list[str]] = defaultdict(list)
     for uc, slot in m.fixed.items():
         by_slot[slot].append(uc)
 
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for slot, ucs in sorted(by_slot.items()):
         if len(ucs) > MAX_EVALUACIONES_TURNO:
-            out.append(
+            out.append((
+                "turno_lleno",
                 f"{_slot_label(slot)} tiene {len(ucs)} evaluaciones y el máximo por turno es "
-                f"{MAX_EVALUACIONES_TURNO}."
-            )
+                f"{MAX_EVALUACIONES_TURNO}.",
+            ))
         total = sum(m.ins.get(u, 0) for u in ucs)
         limit = m.cp.get(slot, float("inf")) * m.fac_cp
         if total > limit:
-            out.append(
-                f"{_slot_label(slot)} supera la capacidad: {total:g} inscriptos para {limit:g} lugares."
-            )
+            out.append((
+                "capacidad",
+                f"{_slot_label(slot)} supera la capacidad: {total:g} inscriptos para "
+                f"{limit:g} lugares.",
+            ))
         for a, b in combinations(sorted(ucs), 2):
             if b in m.cop[a]:
-                out.append(
+                out.append((
+                    "profesor",
                     f"{m.name(a)} y {m.name(b)} comparten profesor y están en el mismo turno "
-                    f"({_slot_label(slot)})."
-                )
+                    f"({_slot_label(slot)}).",
+                ))
     # Lo que sigue sólo depende del día, así que también alcanza a las UCs
     # fijadas al día sin turno (planilla vieja).
     por_dia: Counter[int] = Counter(m.fixed_day.values())
     for dia, cuantas in sorted(por_dia.items()):
         tope = MAX_EVALUACIONES_TURNO * m.turnos_por_dia[dia]
         if cuantas > tope:
-            out.append(
+            out.append((
+                "dia_lleno",
                 f"Día {dia} tiene {cuantas} evaluaciones y entre sus {m.turnos_por_dia[dia]} "
-                f"turnos entran {tope}."
-            )
+                f"turnos entran {tope}.",
+            ))
         inscriptos = sum(m.ins.get(u, 0) for u, d in m.fixed_day.items() if d == dia)
         lugares = sum(m.cp.get(s, 0) for s in m.slots if s[0] == dia) * m.fac_cp
         if inscriptos > lugares:
-            out.append(
+            out.append((
+                "capacidad",
                 f"Día {dia} supera la capacidad: {inscriptos:g} inscriptos para {lugares:g} "
-                f"lugares entre todos sus turnos."
-            )
+                f"lugares entre todos sus turnos.",
+            ))
 
     for g in m.groups:
         en_grupo = [(u, m.fixed_day[u]) for u in g if u in m.fixed_day]
         for (a, da), (b, db) in combinations(en_grupo, 2):
             if da == db:
-                out.append(
+                out.append((
+                    "semestre",
                     f"{m.name(a)} y {m.name(b)} son del mismo semestre y carrera pero están el "
-                    f"mismo día (Día {da})."
-                )
+                    f"mismo día (Día {da}).",
+                ))
     for a, b in combinations(sorted(m.fixed_day), 2):
         if m.muy_cerca(a, b):
-            out.append(
+            out.append((
+                "cercania",
                 f"{m.name(a)} ({m.lugar(a)}) y {m.name(b)} ({m.lugar(b)}) tienen muchos "
                 f"estudiantes en común ({m.co[(a, b)]:g}) y están demasiado cerca: necesitan al "
-                f"menos {SEPARACION_MINIMA} días de separación."
-            )
+                f"menos {SEPARACION_MINIMA} días de separación.",
+            ))
     return out
 
 
@@ -221,8 +243,14 @@ def free_uc_problems(m: _Model) -> list[str]:
     return out
 
 
-def _fixed_report(m: _Model) -> list[str]:
-    conflicts = fixed_conflicts(m)
+def _fixed_report(m: _Model, tolerar: bool = False) -> list[str]:
+    """Mensajes sobre las violaciones entre UCs fijas. Con `tolerar` se dejan
+    afuera las que el modelo sabe tolerar (`TOLERABLES`): esas no impiden
+    resolver el caso, así que no son motivo para frenarlo ni para explicar una
+    infactibilidad."""
+    conflicts = [
+        msg for tipo, msg in fixed_conflicts(m) if not (tolerar and tipo in TOLERABLES)
+    ]
     if not conflicts:
         return []
     listed = conflicts[:MAX_LISTED]
@@ -235,18 +263,27 @@ def _fixed_report(m: _Model) -> list[str]:
     return [header, *listed, *([f"…y {extra} más."] if extra > 0 else [])]
 
 
-def fixed_conflict_report(case_path: str | Path) -> list[str]:
+def fixed_conflict_report(case_path: str | Path, tolerar: bool = False) -> list[str]:
     """Mensajes sobre violaciones entre las UCs fijas; vacío si no hay."""
-    return _fixed_report(_Model(load_calendar_data(str(case_path))))
+    return _fixed_report(_Model(load_calendar_data(str(case_path))), tolerar)
 
 
-def diagnose(case_path: str | Path) -> list[str]:
+def tolerable_conflicts(case_path: str | Path) -> list[str]:
+    """Mensajes de las violaciones entre UCs fijas que el modelo sabe tolerar.
+
+    Son las que la aplicación menos restrictiva deja pasar: se le muestran al
+    usuario como advertencia, porque el calendario que sale las mantiene."""
+    m = _Model(load_calendar_data(str(case_path)))
+    return [msg for tipo, msg in fixed_conflicts(m) if tipo in TOLERABLES]
+
+
+def diagnose(case_path: str | Path, tolerar: bool = False) -> list[str]:
     """Mensajes en español que explican por qué el caso es infactible.
 
     Lista vacía si no se pudo determinar una causa puntual."""
     m = _Model(load_calendar_data(str(case_path)))
 
-    report = _fixed_report(m)
+    report = _fixed_report(m, tolerar)
     if report:
         return report
 

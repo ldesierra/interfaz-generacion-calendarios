@@ -23,11 +23,20 @@ class CalendarSaved(BaseModel):
     desconocidas: list[str]
 
 
+class DeriveRequest(BaseModel):
+    # "Aplicación menos restrictiva": si el calendario vigente ya incumple
+    # restricciones que el modelo sabe tolerar, se arma el caso igual en vez de
+    # rechazarlo (ver derived_case.build_derived_case).
+    tolerar_conflictos: bool = False
+
+
 class DerivedCaseCreated(BaseModel):
     derived_case_id: str
     fixed_ucs: int
     free_ucs: list[str]
     warnings: list[str]
+    # Violaciones del calendario vigente que se toleraron.
+    toleradas: list[str] = []
 
 
 def _require_case(case_id: str) -> None:
@@ -60,12 +69,14 @@ async def put_calendar(case_id: str, file: UploadFile = File(...)):
 
 
 @router.post("/derive", status_code=201, response_model=DerivedCaseCreated)
-def derive_case(case_id: str):
+def derive_case(case_id: str, body: DeriveRequest | None = None):
     """Arma el caso derivado (calendario vigente + cambios). El caso nuevo se
     resuelve con `POST /api/cases/{derived_case_id}/solve`."""
     _require_case(case_id)
     try:
-        derived = derived_case.build_derived_case(case_id)
+        derived = derived_case.build_derived_case(
+            case_id, tolerar_conflictos=(body or DeriveRequest()).tolerar_conflictos
+        )
     except derived_case.DerivedCaseError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return DerivedCaseCreated(
@@ -73,4 +84,5 @@ def derive_case(case_id: str):
         fixed_ucs=derived.fixed_ucs,
         free_ucs=derived.free_ucs,
         warnings=derived.warnings,
+        toleradas=derived.toleradas,
     )
